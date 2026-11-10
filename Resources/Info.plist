@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key><string>Aries Dynamic Island</string>
+    <key>CFBundleDisplayName</key><string>Aries Dynamic Island</string>
+    <key>CFBundleIdentifier</key><string>app.aries.dynamicisland</string>
+    <key>CFBundleExecutable</key><string>Aries</string>
+    <key>CFBundlePackageType</key><string>APPL</string>
+    <key>CFBundleShortVersionString</key><string>1.0.0</string>
+    <key>CFBundleVersion</key><string>1</string>
+    <key>CFBundleIconFile</key><string>AppIcon</string>
+    <key>LSMinimumSystemVersion</key><string>14.0</string>
+    <key>LSUIElement</key><true/>
+    <key>NSHighResolutionCapable</key><true/>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>Aries Dynamic Island reads what's playing in Spotify and Apple Music so it can show it in your notch and control playback.</string>
+    <key>NSCalendarsFullAccessUsageDescription</key>
+    <string>Aries shows your next event in the island and gives you a heads-up before meetings.</string>
+    <key>NSCalendarsUsageDescription</key>
+    <string>Aries shows your next event in the island and gives you a heads-up before meetings.</string>
+    <key>NSCameraUsageDescription</key>
+    <string>Aries uses the camera only for the Mirror tab, so you can check how you look before a call.</string>
+    <key>NSHumanReadableCopyright</key>
+    <string>MIT License</string>
+</dict>
+</plist>

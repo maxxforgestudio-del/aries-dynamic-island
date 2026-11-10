@@ -1,0 +1,141 @@
+import AppKit
+import SwiftUI
+
+/// Transparent, non-activating panel that sits over the notch.
+final class IslandPanel: NSPanel {
+    /// Becomes key only when a text field needs typing (notes, search), without activating the app.
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { false }
+}
+
+final class IslandPanelController {
+    let model: IslandModel
+    let panel: IslandPanel
+    /// Big enough for the expanded island plus the music-note particles around it.
+    static let canvasSize = CGSize(width: 820, height: 340)
+
+    private var monitors: [Any] = []
+    private var screenObserver: NSObjectProtocol?
+    private var fallbackTimer: Timer?
+    private var screenFrame: NSRect = .zero
+
+    init(model: IslandModel) {
+        self.model = model
+        panel = IslandPanel(
+            contentRect: NSRect(origin: .zero, size: Self.canvasSize),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered, defer: false)
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = false
+        panel.level = NSWindow.Level(rawValue: NSWindow.Level.mainMenu.rawValue + 3)
+        panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
+        panel.isMovable = false
+        panel.hidesOnDeactivate = false
+        panel.ignoresMouseEvents = true
+        panel.isReleasedWhenClosed = false
+        panel.becomesKeyOnlyIfNeeded = true
+
+        let host = NSHostingView(rootView: IslandRootView(model: model, music: model.music))
+        host.sizingOptions = []
+        host.frame = NSRect(origin: .zero, size: Self.canvasSize)
+        panel.contentView = host
+
+        model.onLayoutChange = { [weak self] in self?.updateMouse() }
+        model.onCollapse = { [weak self] in
+            guard let self, self.panel.isKeyWindow else { return }
+            self.panel.resignKey()
+            NSWorkspace.shared.frontmostApplication?.activate()
+        }
+    }
+
+    func show() {
+        reposition()
+        panel.orderFrontRegardless()
+
+        monitors.append(NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged]) { [weak self] _ in
+            self?.updateMouse()
+        } as Any)
+        monitors.append(NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged, .mouseExited, .leftMouseUp]) { [weak self] e in
+            self?.updateMouse(); return e
+        } as Any)
+        // Click anywhere else closes the island (like iPhone).
+        monitors.append(NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+            guard let self, self.model.isExpanded, !self.isInside(NSEvent.mouseLocation, margin: 14) else { return }
+            if self.model.calls.call?.kind == .incoming { return }
+            self.model.collapse()
+        } as Any)
+        // Safety net for cases where no mouse event arrives (spaces switching, sleep, etc).
+        fallbackTimer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: true) { [weak self] _ in
+            self?.updateMouse()
+            self?.updateFullscreenVisibility()
+        }
+        screenObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
+        ) { [weak self] _ in self?.reposition() }
+    }
+
+    private func targetScreen() -> NSScreen {
+        NSScreen.screens.first(where: { $0.safeAreaInsets.top > 0 }) ?? NSScreen.main ?? NSScreen.screens[0]
+    }
+
+    func reposition() {
+        let screen = targetScreen()
+        screenFrame = screen.frame
+        model.updateNotch(for: screen)
+        let size = Self.canvasSize
+        panel.setFrame(NSRect(x: screenFrame.midX - size.width / 2,
+                              y: screenFrame.maxY - size.height,
+                              width: size.width, height: size.height), display: true)
+    }
+
+    func focus() {
+        panel.makeKey()
+    }
+
+    private var fullscreenTick = 0
+    private func updateFullscreenVisibility() {
+        fullscreenTick += 1
+        guard fullscreenTick % 3 == 0 else { return }
+        let hide = Prefs.bool(Prefs.hideInFullscreen) && Self.frontAppIsFullscreen(on: screenFrame)
+            && model.calls.call == nil && !model.isExpanded
+        let target: CGFloat = hide ? 0 : 1
+        if panel.alphaValue != target {
+            NSAnimationContext.runAnimationGroup { $0.duration = 0.25; panel.animator().alphaValue = target }
+        }
+    }
+
+    /// A normal-layer window of the frontmost app covering the whole screen = full-screen app.
+    private static func frontAppIsFullscreen(on frame: NSRect) -> Bool {
+        guard let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier,
+              let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]]
+        else { return false }
+        for w in list where (w[kCGWindowOwnerPID as String] as? pid_t) == pid && (w[kCGWindowLayer as String] as? Int) == 0 {
+            if let b = w[kCGWindowBounds as String] as? [String: CGFloat],
+               b["Width"] ?? 0 >= frame.width, b["Height"] ?? 0 >= frame.height { return true }
+        }
+        return false
+    }
+
+    private func isInside(_ p: NSPoint, margin: CGFloat) -> Bool {
+        let size = model.totalSize
+        return NSRect(x: screenFrame.midX - size.width / 2 - margin, y: screenFrame.maxY - size.height - margin,
+                      width: size.width + margin * 2, height: size.height + margin + 2).contains(p)
+    }
+
+    /// Only accept mouse events while the cursor is over the island itself,
+    /// so the rest of the (transparent) panel never blocks the menu bar.
+    func updateMouse() {
+        let p = NSEvent.mouseLocation
+        let size = model.totalSize
+        let dragging = NSEvent.pressedMouseButtons & 1 != 0
+        let margin: CGFloat = dragging ? 40 : (model.isExpanded ? 14 : 3)
+        let rect = NSRect(x: screenFrame.midX - size.width / 2 - margin,
+                          y: screenFrame.maxY - size.height - margin,
+                          width: size.width + margin * 2,
+                          height: size.height + margin + 2)
+        let inside = rect.contains(p)
+        if panel.ignoresMouseEvents == inside { panel.ignoresMouseEvents = !inside }
+        model.setHovering(inside)
+    }
+}
