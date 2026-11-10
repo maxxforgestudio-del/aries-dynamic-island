@@ -130,14 +130,14 @@ Mic and camera *indicators* only check whether a device is in use. Aries never r
 Requires Xcode or the Xcode Command Line Tools (Swift 5.10+).
 
 ```bash
-git clone <this repo>
+git clone https://github.com/maxxforgestudio-del/aries-dynamic-island.git
 cd aries-dynamic-island
 ./build.sh --install     # builds, copies to /Applications and launches
 ```
 
 - `./build.sh` builds `build/Aries Dynamic Island.app`
 - `./build.sh --zip` also makes a release zip
-- Pushing a tag like `v1.0.0` runs GitHub Actions to build and attach the zip to a release.
+- To publish a release: `./build.sh --zip`, then `gh release create vX.Y.Z build/*.zip`
 - `"build/Aries Dynamic Island.app/Contents/MacOS/Aries" --snapshot ./shots` renders every screen with demo content (that's how the screenshots above were made).
 
 ### Project layout
