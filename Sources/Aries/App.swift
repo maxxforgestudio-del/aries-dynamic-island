@@ -269,6 +269,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             menu.addItem(withTitle: "Patch Notes", action: #selector(menuPatchNotes), keyEquivalent: "").target = self
             menu.addItem(withTitle: "Help & Support…", action: #selector(menuHelp), keyEquivalent: "").target = self
             menu.addItem(withTitle: "Report a Bug…", action: #selector(menuReportBug), keyEquivalent: "").target = self
+            menu.addItem(withTitle: "Request a Feature…", action: #selector(menuFeature), keyEquivalent: "").target = self
             menu.addItem(withTitle: "MAXX FORGE STUDIO Website", action: #selector(menuStudio), keyEquivalent: "").target = self
             menu.addItem(withTitle: "Check for Updates…", action: #selector(menuUpdates), keyEquivalent: "").target = self
             menu.addItem(withTitle: "Settings…", action: #selector(menuSettings), keyEquivalent: ",").target = self
@@ -289,6 +290,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func menuWhatsNew() { openWhatsNew() }
     @objc private func menuPatchNotes() { openSettings(pane: "patchnotes") }
     @objc private func menuReportBug() { NSWorkspace.shared.open(PatchNotes.reportBugURL) }
+    @objc private func menuFeature() { NSWorkspace.shared.open(PatchNotes.requestFeatureURL) }
     @objc private func menuHelp() { NSWorkspace.shared.open(PatchNotes.supportURL()) }
     @objc private func menuStudio() { NSWorkspace.shared.open(Brand.website) }
     @objc private func menuUpdates() { Updater.shared.check(silent: false); openSettings(pane: "updates") }

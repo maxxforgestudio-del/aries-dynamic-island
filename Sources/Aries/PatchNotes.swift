@@ -137,6 +137,7 @@ final class PatchNotes: ObservableObject {
         var c = URLComponents(url: base, resolvingAgainstBaseURL: false) ?? URLComponents(url: Brand.defaultSupport, resolvingAgainstBaseURL: false)!
         let v = ProcessInfo.processInfo.operatingSystemVersion
         var q = c.queryItems ?? []
+        q.removeAll { ["app", "version", "macos", "topic"].contains($0.name) }
         q += [.init(name: "app", value: "aries"), .init(name: "version", value: Updater.currentVersion),
               .init(name: "macos", value: "\(v.majorVersion).\(v.minorVersion).\(v.patchVersion)")]
         if let topic { q.append(.init(name: "topic", value: topic)) }
@@ -145,6 +146,7 @@ final class PatchNotes: ObservableObject {
     }
 
     static var reportBugURL: URL { supportURL(topic: "bug") }
+    static var requestFeatureURL: URL { supportURL(topic: "feature") }
 
     static func prettyDate(_ ymd: String) -> String {
         let p = DateFormatter(); p.dateFormat = "yyyy-MM-dd"; p.locale = Locale(identifier: "en_US_POSIX")
@@ -184,15 +186,18 @@ struct PatchNotesPane: View {
                     Button { NSWorkspace.shared.open(PatchNotes.reportBugURL) } label: {
                         Label("Report a Bug", systemImage: "ladybug.fill")
                     }
+                    Button { NSWorkspace.shared.open(PatchNotes.requestFeatureURL) } label: {
+                        Label("Request a Feature", systemImage: "lightbulb.fill")
+                    }
                     Button { NSWorkspace.shared.open(PatchNotes.supportURL()) } label: {
                         Label("Get Help", systemImage: "questionmark.circle.fill")
                     }
                     Button { NSWorkspace.shared.open(URL(string: "https://github.com/\(Updater.repo)/releases")!) } label: {
                         Label("All Releases", systemImage: "arrow.up.right.square")
                     }
-                    Spacer()
-                    Toggle("Tell me about new notes", isOn: $toast).toggleStyle(.switch).controlSize(.small)
                 }
+                .fixedSize()
+                Toggle("Tell me when new patch notes are posted", isOn: $toast)
             }
 
             if let issues = notes.feed?.knownIssues, !issues.isEmpty {

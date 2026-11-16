@@ -840,7 +840,8 @@ private struct AboutPane: View {
                 }
                 Link("Visit maxxforgestudio.com", destination: Brand.website)
                 Link("Get help or ask a question", destination: PatchNotes.supportURL())
-                Link("Report a bug or request a feature", destination: PatchNotes.reportBugURL)
+                Link("Report a bug", destination: PatchNotes.reportBugURL)
+                Link("Request a feature", destination: PatchNotes.requestFeatureURL)
                 Link("Maxx Forge Studio on GitHub", destination: URL(string: "https://github.com/maxxforgestudio-del")!)
             }
             Section {

@@ -1,7 +1,7 @@
 {
   "updated": "2026-11-16",
   "schedule": "New patch notes are posted every 1–2 weeks.",
-  "supportURL": "https://www.maxxforgestudio.com/help",
+  "supportURL": "https://www.maxxforgestudio.com/help?app=aries",
   "knownIssues": [
     "Lock Screen widgets may not appear on every macOS version. Turn them on in Settings › Desktop & Lock Screen and use “Preview: Lock Screen Now” to test.",
     "Spotify now limits some features for small apps, so an artist's Popular songs come from Spotify search and may differ slightly from the Spotify app.",
