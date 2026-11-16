@@ -181,6 +181,13 @@ final class IslandModel: ObservableObject {
             }
         }
         Updater.shared.startAutomaticChecks()
+        PatchNotes.shared.onNew = { [weak self] v in
+            guard let self, !self.isExpanded else { return }
+            self.show(Toast(icon: "doc.text.fill", tint: .teal, title: "New Patch Notes",
+                            detail: "See Settings › Patch Notes"), for: 3)
+        }
+        PatchNotes.shared.start()
+        PrivacyGuard.shared.start()
         calendar.start()
         clipboard.start()
         weather.start()
@@ -606,6 +613,8 @@ final class IslandModel: ObservableObject {
             collapse()
         case "settings":
             AppDelegate.shared.openSettings(pane: q["pane"] ?? "general")
+        case "patchnotes":
+            AppDelegate.shared.openSettings(pane: "patchnotes")
         case "whatsnew":
             AppDelegate.shared.openWhatsNew()
         case "welcome":

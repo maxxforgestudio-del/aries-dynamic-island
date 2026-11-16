@@ -433,13 +433,15 @@ private final class LockWindow: NSWindow {
 private struct LockScreenView: View {
     let model: IslandModel
     @ObservedObject var music: MusicController
+    @AppStorage(Prefs.privateLockScreen) private var privateMode = false
 
     var body: some View {
         GeometryReader { geo in
             VStack(spacing: 14) {
                 HStack(spacing: 14) {
                     WeatherWidget(weather: model.weather)
-                    CalendarWidget(calendar: model.calendar)
+                    // Private Lock Screen: your calendar stays hidden until you unlock.
+                    if !privateMode { CalendarWidget(calendar: model.calendar) }
                     BatteryWidget(system: model.system)
                 }
                 .scaleEffect(0.82)

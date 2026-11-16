@@ -1,4 +1,6 @@
 import AppKit
+import CryptoKit
+import Security
 import SwiftUI
 
 /// Checks GitHub Releases for a newer version and installs it in place.
@@ -15,6 +17,8 @@ final class Updater: NSObject, ObservableObject, URLSessionDownloadDelegate {
     @Published private(set) var releaseNotes = ""
     @Published private(set) var lastChecked: Date?
     private var downloadURL: URL?
+    /// SHA-256 GitHub publishes for the release zip ("sha256:…"); the download must match it.
+    private var expectedDigest: String?
     var canInstallInPlace: Bool { downloadURL != nil }
     private var timer: Timer?
     private var session: URLSession?
@@ -53,12 +57,20 @@ final class Updater: NSObject, ObservableObject, URLSessionDownloadDelegate {
             }
             let version = tag.trimmingCharacters(in: CharacterSet(charactersIn: "vV"))
             let assets = (j["assets"] as? [[String: Any]]) ?? []
-            let zip = assets.first { ($0["name"] as? String)?.hasSuffix(".zip") == true }?["browser_download_url"] as? String
+            let asset = assets.first { ($0["name"] as? String)?.hasSuffix(".zip") == true }
+            // Only ever download from GitHub itself, over HTTPS.
+            let zip = (asset?["browser_download_url"] as? String).flatMap { s -> String? in
+                guard let u = URL(string: s), u.scheme == "https", u.host == "github.com",
+                      u.path.hasPrefix("/\(Self.repo)/releases/download/") else { return nil }
+                return s
+            }
+            let digest = (asset?["digest"] as? String).flatMap { $0.hasPrefix("sha256:") ? String($0.dropFirst(7)).lowercased() : nil }
             await MainActor.run {
                 self.lastChecked = Date()
                 self.latestVersion = version
                 self.releaseNotes = (j["body"] as? String) ?? ""
                 self.downloadURL = zip.flatMap(URL.init(string:))
+                self.expectedDigest = digest
                 if Self.isNewer(version, than: Self.currentVersion) {
                     self.state = .available
                     if silent { self.onAvailable?(version) }
@@ -108,6 +120,17 @@ final class Updater: NSObject, ObservableObject, URLSessionDownloadDelegate {
             try fm.createDirectory(at: work, withIntermediateDirectories: true)
             let zip = work.appendingPathComponent("update.zip")
             try fm.moveItem(at: location, to: zip)
+            // 1. GitHub redirects downloads to its own asset servers — nothing else is accepted.
+            if let host = downloadTask.response?.url?.host,
+               !(host == "github.com" || host.hasSuffix(".githubusercontent.com")) {
+                throw Self.fail("The update came from an unexpected server (\(host)), so it wasn't installed.")
+            }
+            // 2. The file must match the checksum GitHub published for this release.
+            if let want = expectedDigest {
+                let have = SHA256.hash(data: try Data(contentsOf: zip, options: .mappedIfSafe))
+                    .map { String(format: "%02x", $0) }.joined()
+                guard have == want else { throw Self.fail("The update didn't match its published checksum, so it wasn't installed.") }
+            }
             let unzip = Process()
             unzip.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
             unzip.arguments = ["-x", "-k", zip.path, work.path]
@@ -117,6 +140,12 @@ final class Updater: NSObject, ObservableObject, URLSessionDownloadDelegate {
                       .first(where: { $0.pathExtension == "app" }),
                   Bundle(url: newApp)?.bundleIdentifier == Bundle.main.bundleIdentifier
             else { throw NSError(domain: "Aries", code: 1, userInfo: [NSLocalizedDescriptionKey: "The download didn't contain Aries"]) }
+            // 3. It must be validly signed as Aries, and 4. newer than this copy (no downgrades).
+            guard Self.isValidlySigned(newApp) else { throw Self.fail("The update's signature isn't valid, so it wasn't installed.") }
+            let newVersion = Bundle(url: newApp)?.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
+            guard Self.isNewer(newVersion, than: Self.currentVersion) else {
+                throw Self.fail("The download isn't newer than the version you have.")
+            }
 
             let current = Bundle.main.bundleURL
             _ = try fm.replaceItemAt(current, withItemAt: newApp)
@@ -124,6 +153,21 @@ final class Updater: NSObject, ObservableObject, URLSessionDownloadDelegate {
         } catch {
             state = .failed(error.localizedDescription)
         }
+    }
+
+    private static func fail(_ msg: String) -> NSError {
+        NSError(domain: "Aries", code: 2, userInfo: [NSLocalizedDescriptionKey: msg])
+    }
+
+    /// Checks the whole bundle's code signature and that it identifies as Aries.
+    static func isValidlySigned(_ app: URL) -> Bool {
+        var code: SecStaticCode?
+        guard SecStaticCodeCreateWithPath(app as CFURL, [], &code) == errSecSuccess, let code else { return false }
+        var req: SecRequirement?
+        guard SecRequirementCreateWithString("identifier \"app.aries.dynamicisland\"" as CFString, [], &req) == errSecSuccess
+        else { return false }
+        let flags = SecCSFlags(rawValue: kSecCSCheckAllArchitectures | kSecCSCheckNestedCode | kSecCSStrictValidate)
+        return SecStaticCodeCheckValidity(code, flags, req) == errSecSuccess
     }
 
     private func relaunch(_ app: URL) {

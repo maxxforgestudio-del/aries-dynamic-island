@@ -80,6 +80,9 @@ enum Prefs {
     static let announce = "a11yAnnounce"
     static let webPlayers = "webPlayers"
     static let didOnboard = "didOnboard"
+    static let patchNotesToast = "patchNotesToast"
+    static let hideFromCapture = "hideFromCapture"
+    static let privateLockScreen = "privateLockScreen"
 
     static func register() {
         UserDefaults.standard.register(defaults: [
@@ -87,6 +90,9 @@ enum Prefs {
             hoverDelay: 0.12,
             haptics: true,
             showMenuBarIcon: true,
+            patchNotesToast: true,
+            hideFromCapture: false,
+            privateLockScreen: false,
             preferredSource: "auto",
             showNotes: true,
             notesIntensity: 0.35,

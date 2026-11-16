@@ -1,0 +1,29 @@
+{
+  "updated": "2026-11-16",
+  "schedule": "New patch notes are posted every 1–2 weeks.",
+  "knownIssues": [
+    "Lock Screen widgets may not appear on every macOS version. Turn them on in Settings › Desktop & Lock Screen and use “Preview: Lock Screen Now” to test.",
+    "Spotify now limits some features for small apps, so an artist's Popular songs come from Spotify search and may differ slightly from the Spotify app.",
+    "Connecting a Spotify account still needs a free Spotify developer app (Settings › Music Connections walks you through it)."
+  ],
+  "entries": [
+    {
+      "version": "2.0.0",
+      "date": "2026-11-16",
+      "title": "Aquatic",
+      "items": [
+        { "type": "new", "text": "Aquatic, Crystal and Classic glass styles for the island." },
+        { "type": "new", "text": "Word-by-word synced lyrics, a full-screen karaoke mode with a singing score, and Vinyl mode." },
+        { "type": "new", "text": "Desktop and Lock Screen widgets: now playing, clock, weather, calendar, battery and to-dos." },
+        { "type": "new", "text": "Spotify artist and album pages, Up Next, add to playlist and follow artists." },
+        { "type": "new", "text": "Tools tab: calculator and unit converter, color picker, Keep Awake, dark mode and more." },
+        { "type": "new", "text": "Focus modes, FaceTime calls, Caps Lock, Low Power and Wi-Fi alerts, just like iPhone." },
+        { "type": "improved", "text": "One-click connecting for Spotify and Apple Music." },
+        { "type": "improved", "text": "The Aries logo now appears in the menu bar." },
+        { "type": "fixed", "text": "Music Connections no longer shows Spotify as connected while asking you to connect it." },
+        { "type": "fixed", "text": "Artist and album pages now load when the full-screen player opens straight onto them." },
+        { "type": "security", "text": "Your Spotify sign-in is stored in a private file only your Mac account can read, so macOS no longer asks for your password after updates." }
+      ]
+    }
+  ]
+}

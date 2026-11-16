@@ -49,6 +49,11 @@
   .steps li::before { counter-increment:s; content:counter(s); position:absolute; left:16px; top:14px; width:28px; height:28px; border-radius:50%; background:rgba(63,208,255,.15); color:var(--accent); display:grid; place-items:center; font-weight:700; }
   code { background:#0a1a28; border:1px solid var(--line); padding:2px 7px; border-radius:6px; font:14px ui-monospace, Menlo, monospace; word-break:break-all; }
   pre { background:#0a1a28; border:1px solid var(--line); border-radius:12px; padding:14px 16px; overflow-x:auto; font:14px ui-monospace, Menlo, monospace; margin-top:8px; }
+  .pn-card { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:18px 20px; }
+  .pn-card h3 { font-size:18px; margin-bottom:10px; display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+  .pn-card h3 span { color:var(--dim); font-weight:500; font-size:14px; }
+  .pn-item { display:flex; gap:10px; align-items:baseline; padding:4px 0; color:#d6dee8; font-size:15px; }
+  .pn-tag { flex:none; font-size:10px; font-weight:800; letter-spacing:.06em; padding:3px 7px; border-radius:99px; color:#fff; }
   footer { padding:70px 0 40px; text-align:center; color:var(--dim); font-size:14px; }
   footer img { width:120px; opacity:.85; margin-bottom:12px; }
   @media (max-width:560px) { .btn { width:100%; justify-content:center; } .shots img { height:200px; } }
@@ -103,6 +108,12 @@
     </div>
   </section>
 
+  <section id="patch-notes">
+    <h2>Patch notes</h2>
+    <p class="lead" id="pn-sched">New patch notes every 1–2 weeks.</p>
+    <div id="pn" style="max-width:760px;margin:0 auto;display:grid;gap:14px"></div>
+  </section>
+
   <section id="install">
     <h2>Install in a minute</h2>
     <p class="lead">Aries is free. No account, no ads.</p>
@@ -131,6 +142,23 @@ brew install --cask maxxforgestudio-del/tap/aries-dynamic-island</pre></li>
       if (zip) document.getElementById("dl").href = zip.browser_download_url;
       if (j.tag_name) document.getElementById("ver").textContent = "Version " + j.tag_name.replace(/^v/, "") + " · macOS 14 Sonoma or later · Apple silicon Macs";
     }).catch(() => {});
+  // Patch notes (same file the app reads)
+  fetch("patch-notes.json", {cache: "no-store"}).then(r => r.ok ? r.json() : null).then(f => {
+    if (!f) return;
+    const colors = {new:"#2f7cf6", improved:"#8b5cf6", fixed:"#22a35a", security:"#f08c00"};
+    const esc = t => String(t).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));
+    if (f.schedule) document.getElementById("pn-sched").textContent = f.schedule;
+    const box = document.getElementById("pn");
+    let html = "";
+    if (f.knownIssues && f.knownIssues.length) {
+      html += '<div class="pn-card"><h3>Known issues</h3>' + f.knownIssues.map(i => '<div class="pn-item">⚠️ ' + esc(i) + '</div>').join("") + '</div>';
+    }
+    html += (f.entries || []).slice(0, 5).map(e =>
+      '<div class="pn-card"><h3>Version ' + esc(e.version) + (e.title ? ' — ' + esc(e.title) : '') + '<span>' + esc(e.date) + '</span></h3>' +
+      e.items.map(it => '<div class="pn-item"><span class="pn-tag" style="background:' + (colors[it.type] || "#666") + '">' + esc(it.type.toUpperCase()) + '</span>' + esc(it.text) + '</div>').join("") +
+      '</div>').join("");
+    box.innerHTML = html;
+  }).catch(() => {});
 </script>
 </body>
 </html>

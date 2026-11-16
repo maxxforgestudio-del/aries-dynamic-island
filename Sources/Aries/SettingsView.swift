@@ -21,14 +21,16 @@ private let panes: [Pane] = [
     .init(id: "popups", title: "Popups & Indicators", icon: "bell.badge.fill", color: .red, keywords: "volume airpods charging unlock downloads mic camera battery focus do not disturb caps lock low power offline wifi"),
     .init(id: "shortcuts", title: "Shortcuts & Gestures", icon: "command", color: .indigo, keywords: "keyboard swipe scroll hotkeys"),
     .init(id: "accessibility", title: "Accessibility", icon: "accessibility", color: .blue, keywords: "reduce motion transparency contrast larger voiceover"),
-    .init(id: "permissions", title: "Privacy & Permissions", icon: "hand.raised.fill", color: .teal, keywords: "privacy allow access automation calendar accessibility camera"),
+    .init(id: "permissions", title: "Privacy & Security", icon: "hand.raised.fill", color: .teal, keywords: "privacy security protection screen sharing recording hide lock screen erase data sign out allow access automation calendar accessibility camera tracking"),
     .init(id: "updates", title: "Software Update", icon: "arrow.triangle.2.circlepath", color: .cyan, keywords: "update version automatic install"),
+    .init(id: "patchnotes", title: "Patch Notes", icon: "doc.text.fill", color: Color(red: 0.2, green: 0.6, blue: 0.55), keywords: "patch notes changelog changes fixes bugs known issues report bug release notes"),
     .init(id: "about", title: "About", icon: "info.circle.fill", color: .orange, keywords: "maxx forge studio version license support"),
 ]
 
 struct SettingsView: View {
     @ObservedObject var music: MusicController
     @ObservedObject var spotify: SpotifyWeb
+    @ObservedObject private var patchNotes = PatchNotes.shared
     @AppStorage("settingsPane") private var pane = "general"
     @ViewState private var search = ""
     @Namespace private var ns
@@ -79,6 +81,7 @@ struct SettingsView: View {
                     case "accessibility": AccessibilityPane()
                     case "permissions": PermissionsPane(center: PermissionCenter.shared)
                     case "updates": UpdatesPane(updater: Updater.shared)
+                    case "patchnotes": PatchNotesPane(notes: PatchNotes.shared)
                     case "about": AboutPane(music: music)
                     default: GeneralPane(music: music)
                     }
@@ -160,6 +163,9 @@ struct SettingsView: View {
                                     .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(p.color.gradient))
                                 Text(p.title).font(.system(size: 13, weight: pane == p.id ? .semibold : .regular))
                                 Spacer()
+                                if p.id == "patchnotes" && patchNotes.hasUnread {
+                                    Circle().fill(Color.blue).frame(width: 8, height: 8)
+                                }
                             }
                             .padding(.vertical, 6).padding(.trailing, 8)
                             .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -900,6 +906,7 @@ private struct PermissionsPane: View {
                     Button("Allow All") { center.requestNeeded(); center.missing.forEach { center.request($0) } }
                 }
             }
+            PrivacySecuritySection()
             Section("Permissions") {
                 ForEach(PermissionCenter.Kind.allCases) { k in PermissionRow(kind: k, center: center) }
             }
