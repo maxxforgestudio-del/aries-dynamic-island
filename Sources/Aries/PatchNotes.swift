@@ -57,6 +57,8 @@ final class PatchNotes: ObservableObject {
         let schedule: String?
         let knownIssues: [String]?
         let entries: [Entry]
+        /// Optional: where Help and Report a Bug send people (an https link).
+        let supportURL: String?
     }
 
     @Published private(set) var feed: Feed?
@@ -127,26 +129,22 @@ final class PatchNotes: ObservableObject {
         hasUnread = false
     }
 
-    /// A new GitHub issue with the app and macOS version filled in (nothing personal).
-    static var reportBugURL: URL {
-        let os = ProcessInfo.processInfo.operatingSystemVersionString
-        let body = """
-        **What happened?**
-
-
-        **What did you expect?**
-
-
-        **Steps to reproduce**
-        1.
-
-        ---
-        Aries \(Updater.currentVersion) · macOS \(os)
-        """
-        var c = URLComponents(string: "https://github.com/\(Updater.repo)/issues/new")!
-        c.queryItems = [.init(name: "labels", value: "bug"), .init(name: "title", value: "Bug: "), .init(name: "body", value: body)]
-        return c.url!
+    /// The MAXX FORGE STUDIO help page (or wherever the patch notes feed says), with the app and
+    /// macOS version attached so the site can fill them in. Nothing personal is sent.
+    static func supportURL(topic: String? = nil) -> URL {
+        var base = Brand.defaultSupport
+        if let s = shared.feed?.supportURL, let u = URL(string: s), u.scheme == "https" { base = u }
+        var c = URLComponents(url: base, resolvingAgainstBaseURL: false) ?? URLComponents(url: Brand.defaultSupport, resolvingAgainstBaseURL: false)!
+        let v = ProcessInfo.processInfo.operatingSystemVersion
+        var q = c.queryItems ?? []
+        q += [.init(name: "app", value: "aries"), .init(name: "version", value: Updater.currentVersion),
+              .init(name: "macos", value: "\(v.majorVersion).\(v.minorVersion).\(v.patchVersion)")]
+        if let topic { q.append(.init(name: "topic", value: topic)) }
+        c.queryItems = q
+        return c.url ?? base
     }
+
+    static var reportBugURL: URL { supportURL(topic: "bug") }
 
     static func prettyDate(_ ymd: String) -> String {
         let p = DateFormatter(); p.dateFormat = "yyyy-MM-dd"; p.locale = Locale(identifier: "en_US_POSIX")
@@ -186,6 +184,9 @@ struct PatchNotesPane: View {
                     Button { NSWorkspace.shared.open(PatchNotes.reportBugURL) } label: {
                         Label("Report a Bug", systemImage: "ladybug.fill")
                     }
+                    Button { NSWorkspace.shared.open(PatchNotes.supportURL()) } label: {
+                        Label("Get Help", systemImage: "questionmark.circle.fill")
+                    }
                     Button { NSWorkspace.shared.open(URL(string: "https://github.com/\(Updater.repo)/releases")!) } label: {
                         Label("All Releases", systemImage: "arrow.up.right.square")
                     }
@@ -202,7 +203,7 @@ struct PatchNotesPane: View {
                 } header: {
                     Text("Known issues")
                 } footer: {
-                    Text("We're working on these. If something else is wrong, tap Report a Bug.")
+                    Text("We're working on these. If something else is wrong, tap Report a Bug — it opens the MAXX FORGE STUDIO help page.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }

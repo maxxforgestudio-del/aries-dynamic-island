@@ -242,6 +242,12 @@ Sources/Aries/
 - Word-by-word lyric highlighting is estimated from line timings, because LRCLIB provides line-level sync.
 - Not notarized yet. See [Install](#install).
 
+## Help & support
+
+Questions, help and bug reports go to **[maxxforgestudio.com/help](https://www.maxxforgestudio.com/help)**.
+In the app: menu bar icon → **Help & Support…** or **Report a Bug…**, or Settings › Patch Notes.
+Patch notes are posted every 1–2 weeks in Settings › Patch Notes and on the [download page](https://maxxforgestudio-del.github.io/aries-dynamic-island/#patch-notes).
+
 ## License
 
 **© 2026 Maxx Forge Studio. All rights reserved.** Aries Dynamic Island is free to download and use, but the source code, design, names and logos are proprietary to Maxx Forge Studio and may not be copied, modified or redistributed. See [LICENSE](LICENSE).

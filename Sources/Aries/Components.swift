@@ -242,6 +242,10 @@ extension NSWindow {
 enum Brand {
     static let company = "Maxx Forge Studio"
     static let copyright = "© 2026 Maxx Forge Studio. All rights reserved."
+    static let website = URL(string: "https://www.maxxforgestudio.com")!
+    /// Where help questions and bug reports go. The patch notes feed can point this somewhere
+    /// else (`supportURL`) without an app update.
+    static let defaultSupport = URL(string: "https://www.maxxforgestudio.com/help")!
     static let codename = Bundle.main.object(forInfoDictionaryKey: "AriesCodename") as? String ?? ""
     static var versionLine: String {
         let v = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
