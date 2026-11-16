@@ -19,3 +19,10 @@ Every 1–2 weeks:
 4. Commit and push to `main`. Copies of Aries pick it up within about 4 hours, or right away with Refresh.
 
 The download page shows the same notes.
+
+## Ending support for old versions
+
+Set `minimumVersion` in `docs/patch-notes.json` (for example `"2.0.1"`). Any copy of Aries older than that
+(2.0.1 and later) shows a "no longer supported" alert, a red banner in Settings and an **Update Now** button.
+You can also change `unsupportedMessage`. To support only the newest version, set `minimumVersion`
+to the newest release every time one goes out.

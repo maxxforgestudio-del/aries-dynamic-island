@@ -9,22 +9,96 @@
   ],
   "entries": [
     {
+      "version": "2.0.1",
+      "date": "2026-11-16",
+      "title": "Polish & protection",
+      "items": [
+        {
+          "type": "new",
+          "text": "Patch Notes in Settings, updated every 1–2 weeks, with known issues and a Report a Bug button."
+        },
+        {
+          "type": "new",
+          "text": "Privacy & Security: hide Aries from screen sharing and recordings, Private Lock Screen, and Erase All."
+        },
+        {
+          "type": "new",
+          "text": "Help, bug reports and feature requests now go to maxxforgestudio.com."
+        },
+        {
+          "type": "new",
+          "text": "Karaoke scoring that hears real singing, checks your timing, rates every line and keeps climbing with combos."
+        },
+        {
+          "type": "improved",
+          "text": "A livelier Settings window with smoother transitions."
+        },
+        {
+          "type": "fixed",
+          "text": "Aries no longer slows down while Apple Music is busy or showing its welcome screen."
+        },
+        {
+          "type": "security",
+          "text": "Updates are verified before installing: they must come from GitHub, match their published checksum and be signed as Aries."
+        },
+        {
+          "type": "security",
+          "text": "Only the newest version of Aries is supported. Older versions will ask you to update."
+        }
+      ]
+    },
+    {
       "version": "2.0.0",
       "date": "2026-11-16",
       "title": "Aquatic",
       "items": [
-        { "type": "new", "text": "Aquatic, Crystal and Classic glass styles for the island." },
-        { "type": "new", "text": "Word-by-word synced lyrics, a full-screen karaoke mode with a singing score, and Vinyl mode." },
-        { "type": "new", "text": "Desktop and Lock Screen widgets: now playing, clock, weather, calendar, battery and to-dos." },
-        { "type": "new", "text": "Spotify artist and album pages, Up Next, add to playlist and follow artists." },
-        { "type": "new", "text": "Tools tab: calculator and unit converter, color picker, Keep Awake, dark mode and more." },
-        { "type": "new", "text": "Focus modes, FaceTime calls, Caps Lock, Low Power and Wi-Fi alerts, just like iPhone." },
-        { "type": "improved", "text": "One-click connecting for Spotify and Apple Music." },
-        { "type": "improved", "text": "The Aries logo now appears in the menu bar." },
-        { "type": "fixed", "text": "Music Connections no longer shows Spotify as connected while asking you to connect it." },
-        { "type": "fixed", "text": "Artist and album pages now load when the full-screen player opens straight onto them." },
-        { "type": "security", "text": "Your Spotify sign-in is stored in a private file only your Mac account can read, so macOS no longer asks for your password after updates." }
+        {
+          "type": "new",
+          "text": "Aquatic, Crystal and Classic glass styles for the island."
+        },
+        {
+          "type": "new",
+          "text": "Word-by-word synced lyrics, a full-screen karaoke mode with a singing score, and Vinyl mode."
+        },
+        {
+          "type": "new",
+          "text": "Desktop and Lock Screen widgets: now playing, clock, weather, calendar, battery and to-dos."
+        },
+        {
+          "type": "new",
+          "text": "Spotify artist and album pages, Up Next, add to playlist and follow artists."
+        },
+        {
+          "type": "new",
+          "text": "Tools tab: calculator and unit converter, color picker, Keep Awake, dark mode and more."
+        },
+        {
+          "type": "new",
+          "text": "Focus modes, FaceTime calls, Caps Lock, Low Power and Wi-Fi alerts, just like iPhone."
+        },
+        {
+          "type": "improved",
+          "text": "One-click connecting for Spotify and Apple Music."
+        },
+        {
+          "type": "improved",
+          "text": "The Aries logo now appears in the menu bar."
+        },
+        {
+          "type": "fixed",
+          "text": "Music Connections no longer shows Spotify as connected while asking you to connect it."
+        },
+        {
+          "type": "fixed",
+          "text": "Artist and album pages now load when the full-screen player opens straight onto them."
+        },
+        {
+          "type": "security",
+          "text": "Your Spotify sign-in is stored in a private file only your Mac account can read, so macOS no longer asks for your password after updates."
+        }
       ]
     }
-  ]
+  ],
+  "minimumVersion": "2.0.1",
+  "unsupportedMessage": "This version of Aries is no longer supported. Only the newest version gets bug fixes and security updates. Click Update Now — it takes a few seconds and keeps all your settings."
 }

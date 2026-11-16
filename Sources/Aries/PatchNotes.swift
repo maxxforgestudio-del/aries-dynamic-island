@@ -59,6 +59,10 @@ final class PatchNotes: ObservableObject {
         let entries: [Entry]
         /// Optional: where Help and Report a Bug send people (an https link).
         let supportURL: String?
+        /// Optional: versions older than this are no longer supported (e.g. "2.0.1").
+        let minimumVersion: String?
+        /// Optional: what to tell people on an unsupported version.
+        let unsupportedMessage: String?
     }
 
     @Published private(set) var feed: Feed?
@@ -69,6 +73,18 @@ final class PatchNotes: ObservableObject {
 
     /// Called when new notes arrive in a background check (to show a little toast).
     var onNew: ((String) -> Void)?
+    /// Called when the feed says this version is no longer supported.
+    var onUnsupported: (() -> Void)?
+
+    /// True when this copy of Aries is older than the feed's `minimumVersion`.
+    var isUnsupported: Bool {
+        guard let min = feed?.minimumVersion, !min.isEmpty else { return false }
+        return Updater.isNewer(min, than: Updater.currentVersion)
+    }
+    var unsupportedMessage: String {
+        feed?.unsupportedMessage
+            ?? "Aries \(Updater.currentVersion) is no longer supported. Only the newest version gets fixes and security updates. Update to keep everything working."
+    }
     private var timer: Timer?
     private static let seenKey = "patchNotesSeen"
 
@@ -85,6 +101,10 @@ final class PatchNotes: ObservableObject {
     }
 
     func start() {
+        // The saved copy may already say this version is too old.
+        if isUnsupported { DispatchQueue.main.asyncAfter(deadline: .now() + 6) { [weak self] in
+            if self?.isUnsupported == true { self?.onUnsupported?() }
+        } }
         DispatchQueue.main.asyncAfter(deadline: .now() + 25) { [weak self] in self?.refresh(background: true) }
         timer = Timer.scheduledTimer(withTimeInterval: 4 * 3600, repeats: true) { [weak self] _ in
             self?.refresh(background: true)
@@ -109,6 +129,7 @@ final class PatchNotes: ObservableObject {
                 self.lastError = nil
                 let changed = f != self.feed
                 self.feed = f
+                if self.isUnsupported { self.onUnsupported?() }
                 try? FileManager.default.createDirectory(at: Self.cacheFile.deletingLastPathComponent(), withIntermediateDirectories: true)
                 try? data.write(to: Self.cacheFile, options: .atomic)
                 let seen = UserDefaults.standard.string(forKey: Self.seenKey)
@@ -163,6 +184,9 @@ struct PatchNotesPane: View {
 
     var body: some View {
         Form {
+            if notes.isUnsupported {
+                Section { UnsupportedBanner() }
+            }
             Section {
                 HStack(alignment: .top, spacing: 12) {
                     Image(systemName: "doc.text.magnifyingglass")
@@ -243,5 +267,75 @@ struct PatchNotesPane: View {
             notes.refresh()
             notes.markRead()
         }
+    }
+}
+
+// MARK: - Unsupported version
+
+/// Red "no longer supported" card with an Update Now button.
+struct UnsupportedBanner: View {
+    @ObservedObject private var notes = PatchNotes.shared
+    @ObservedObject private var updater = Updater.shared
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "exclamationmark.octagon.fill").font(.system(size: 22)).foregroundStyle(.red)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("This version is no longer supported").font(.system(size: 13.5, weight: .bold))
+                Text(notes.unsupportedMessage).font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 8)
+            Button(updateTitle) { UnsupportedVersion.update() }
+                .buttonStyle(.borderedProminent).tint(.red)
+                .disabled(isBusy)
+        }
+        .padding(.vertical, 4)
+    }
+    private var isBusy: Bool {
+        switch updater.state { case .downloading, .installing, .checking: return true; default: return false }
+    }
+    private var updateTitle: String {
+        switch updater.state {
+        case .downloading(let p): return "Downloading \(Int(p * 100))%"
+        case .installing: return "Installing…"
+        case .checking: return "Checking…"
+        default: return "Update Now"
+        }
+    }
+}
+
+enum UnsupportedVersion {
+    private static let lastShownKey = "unsupportedAlertShown"
+
+    /// Installs the newest version in place (or opens the download page if that isn't possible).
+    static func update() {
+        let u = Updater.shared
+        if u.canInstallInPlace, u.state == .available { u.install(); return }
+        u.check(silent: false)
+        // Install as soon as the check finds the update.
+        var tries = 0
+        Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { t in
+            tries += 1
+            if u.state == .available, u.canInstallInPlace { t.invalidate(); u.install() }
+            else if tries > 40 || { if case .failed = u.state { return true }; return false }() {
+                t.invalidate(); NSWorkspace.shared.open(u.releasesPage)
+            }
+        }
+    }
+
+    /// Shows the "no longer supported" alert, at most once every 12 hours.
+    static func showAlertIfDue() {
+        let last = UserDefaults.standard.double(forKey: lastShownKey)
+        guard Date().timeIntervalSince1970 - last > 12 * 3600 else { return }
+        UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: lastShownKey)
+        let a = NSAlert()
+        a.alertStyle = .critical
+        a.messageText = "Aries \(Updater.currentVersion) is no longer supported"
+        a.informativeText = PatchNotes.shared.unsupportedMessage
+        if let logo = Brand.appLogo { a.icon = logo }
+        a.addButton(withTitle: "Update Now")
+        a.addButton(withTitle: "Later")
+        NSApp.activate(ignoringOtherApps: true)
+        if a.runModal() == .alertFirstButtonReturn { update() }
     }
 }

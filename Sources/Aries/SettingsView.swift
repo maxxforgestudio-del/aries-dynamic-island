@@ -75,9 +75,16 @@ struct SettingsView: View {
                 .frame(width: 250)
                 .background(GlassBackdrop(material: .sidebar))
             VStack(alignment: .leading, spacing: 0) {
+                if patchNotes.isUnsupported {
+                    UnsupportedBanner()
+                        .padding(14)
+                        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color.red.opacity(0.12)))
+                        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Color.red.opacity(0.35)))
+                        .padding(.horizontal, 22).padding(.top, 34)
+                }
                 SettingsHero(pane: current)
                     .padding(.horizontal, 22)
-                    .padding(.top, 34)
+                    .padding(.top, patchNotes.isUnsupported ? 14 : 34)
                     .padding(.bottom, 6)
                     .id(pane)
                     .transition(.asymmetric(insertion: .settingsIn, removal: .opacity))

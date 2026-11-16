@@ -186,6 +186,12 @@ final class IslandModel: ObservableObject {
             self.show(Toast(icon: "doc.text.fill", tint: .teal, title: "New Patch Notes",
                             detail: "See Settings › Patch Notes"), for: 3)
         }
+        PatchNotes.shared.onUnsupported = { [weak self] in
+            guard let self else { return }
+            self.show(Toast(icon: "exclamationmark.octagon.fill", tint: .red, title: "Update required",
+                            detail: "This version is no longer supported"), for: 4)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { UnsupportedVersion.showAlertIfDue() }
+        }
         PatchNotes.shared.start()
         PrivacyGuard.shared.start()
         calendar.start()
