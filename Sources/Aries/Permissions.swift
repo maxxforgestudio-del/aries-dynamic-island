@@ -70,16 +70,24 @@ final class PermissionCenter: ObservableObject {
         timer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in self?.refresh() }
     }
 
+    /// True while an Apple Events permission check is running. A check can wait a long time
+    /// (for example while Music shows its welcome screen), so never start a second one meanwhile.
+    private var automationCheckRunning = false
+
     func refresh() {
         var s: [Kind: Status] = statuses
         // Apple Events checks can wait on an open consent prompt — never on the main thread.
-        DispatchQueue.global(qos: .utility).async {
+        if !automationCheckRunning {
+          automationCheckRunning = true
+          DispatchQueue.global(qos: .utility).async {
             let sp = Self.automation(LocalPlayers.spotifyID)
             let mu = Self.automation(LocalPlayers.musicID)
             DispatchQueue.main.async {
+                self.automationCheckRunning = false
                 if self.statuses[.spotify] != sp { self.statuses[.spotify] = sp }
                 if self.statuses[.music] != mu { self.statuses[.music] = mu }
             }
+          }
         }
         switch EKEventStore.authorizationStatus(for: .event) {
         case .fullAccess: s[.calendar] = .granted
@@ -126,9 +134,10 @@ final class PermissionCenter: ObservableObject {
               let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
             request(k); return
         }
+        // Open it normally (not hidden): the first time, Music shows a welcome screen that has
+        // to be dismissed before it answers Aries.
         let cfg = NSWorkspace.OpenConfiguration()
-        cfg.activates = false
-        cfg.hides = true
+        cfg.activates = true
         NSWorkspace.shared.openApplication(at: url, configuration: cfg) { _, _ in
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { self.request(k) }
         }

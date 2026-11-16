@@ -58,7 +58,7 @@ struct PrivacySecuritySection: View {
             Toggle(isOn: $privateLockScreen) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Private Lock Screen")
-                    Text("While your Mac is locked, widgets hide your calendar events and to-dos.")
+                    Text("While your Mac is locked, the Lock Screen widgets hide your calendar events.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
