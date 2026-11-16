@@ -1272,17 +1272,44 @@ private struct PlainLyrics: View {
 
 // MARK: - Karaoke
 
-/// Listens to your microphone while you sing along and scores how much of each line you sang.
-/// Audio never leaves the Mac and nothing is recorded; it's only a loudness meter.
+/// Listens to your microphone while you sing along and scores you like a karaoke machine.
+///
+/// - It only counts real singing: a pitched voice (found with autocorrelation) that is clearly
+///   louder than the room. Background noise or tapping doesn't score.
+/// - Timing matters: singing while a word is due earns points; singing in the gaps doesn't.
+/// - The score never caps. Each line is rated Perfect / Great / Good / Miss, and good lines
+///   in a row build a combo multiplier (up to ×4).
 final class KaraokeMic: ObservableObject {
     static let shared = KaraokeMic()
+
+    enum Rating: String { case perfect = "PERFECT", great = "GREAT", good = "GOOD", miss = "MISS"
+        var color: Color {
+            switch self { case .perfect: return .yellow; case .great: return .green; case .good: return .cyan; case .miss: return .red }
+        }
+    }
+
     @Published private(set) var running = false
     @Published private(set) var level: Double = 0
+    @Published private(set) var voiced = false
     @Published private(set) var score = 0
+    @Published private(set) var combo = 0
+    @Published private(set) var accuracy: Double? = nil     // over the whole song, 0…1
+    @Published private(set) var lastRating: Rating?
+    @Published private(set) var ratingID = 0
     @Published private(set) var denied = false
+
+    var multiplier: Double { 1 + Double(min(combo, 12)) * 0.25 }   // ×1 … ×4
+
     private var engine: AVAudioEngine?
-    private var sungTime = 0.0, lineTime = 0.0
     private var lastTick = Date()
+    // Current line
+    private var lineIndex: Int?
+    private var dueTime = 0.0, sungOnTime = 0.0, sungOffTime = 0.0
+    private var pitches: [Double] = []
+    // Whole song
+    private var totalDue = 0.0, totalOnTime = 0.0
+    // Audio-thread state
+    private var noiseFloor: Float = -60
 
     func toggle() { running ? stop() : start() }
 
@@ -1295,15 +1322,16 @@ final class KaraokeMic: ObservableObject {
                 let input = e.inputNode
                 let fmt = input.outputFormat(forBus: 0)
                 guard fmt.sampleRate > 0 else { return }
-                input.installTap(onBus: 0, bufferSize: 1024, format: fmt) { [weak mic = self] buf, _ in
-                    guard let ch = buf.floatChannelData?[0] else { return }
+                let rate = Float(fmt.sampleRate)
+                input.installTap(onBus: 0, bufferSize: 2048, format: fmt) { [weak mic = self] buf, _ in
+                    guard let mic, let ch = buf.floatChannelData?[0] else { return }
                     let n = Int(buf.frameLength)
-                    var sum: Float = 0
-                    for i in 0..<n { sum += ch[i] * ch[i] }
-                    let rms = sqrt(sum / Float(max(1, n)))
-                    let db = 20 * log10(max(rms, 1e-6))
-                    let lvl = Double(max(0, min(1, (db + 52) / 40)))
-                    DispatchQueue.main.async { if let mic { mic.level = mic.level * 0.6 + lvl * 0.4 } }
+                    let r = mic.analyze(ch, n, rate)
+                    DispatchQueue.main.async {
+                        mic.level = mic.level * 0.55 + r.level * 0.45
+                        mic.voiced = r.voiced
+                        if r.voiced, let f = r.pitch { mic.pitches.append(f) }
+                    }
                 }
                 do { try e.start(); self.engine = e; self.running = true; self.reset() } catch { self.engine = nil }
             }
@@ -1316,20 +1344,105 @@ final class KaraokeMic: ObservableObject {
         engine = nil
         if running { running = false }
         level = 0
+        voiced = false
     }
 
-    func reset() { sungTime = 0; lineTime = 0; score = 0; lastTick = Date() }
+    func reset() {
+        score = 0; combo = 0; accuracy = nil; lastRating = nil
+        lineIndex = nil; dueTime = 0; sungOnTime = 0; sungOffTime = 0; pitches = []
+        totalDue = 0; totalOnTime = 0
+        lastTick = Date()
+    }
 
-    /// Called ~10×/s while a line is being sung.
-    func tick(lineActive: Bool) {
+    /// Loudness + pitch for one buffer. Runs on the audio thread.
+    private func analyze(_ x: UnsafePointer<Float>, _ n: Int, _ rate: Float) -> (level: Double, voiced: Bool, pitch: Double?) {
+        var sum: Float = 0
+        for i in 0..<n { sum += x[i] * x[i] }
+        let rms = sqrt(sum / Float(max(1, n)))
+        let db = 20 * log10(max(rms, 1e-6))
+        // Room noise: follows quiet moments quickly and loud ones only slowly.
+        noiseFloor = db < noiseFloor ? noiseFloor * 0.7 + db * 0.3 : noiseFloor * 0.998 + db * 0.002
+        let level = Double(max(0, min(1, (db + 52) / 40)))
+        guard db > max(-48, noiseFloor + 9) else { return (level, false, nil) }
+
+        // Autocorrelation pitch search between ~70 Hz and ~1000 Hz on a 2:1 downsampled copy.
+        let m = n / 2
+        guard m > 256 else { return (level, false, nil) }
+        var d = [Float](repeating: 0, count: m)
+        for i in 0..<m { d[i] = (x[2 * i] + x[2 * i + 1]) * 0.5 }
+        let sr = rate / 2
+        let minLag = max(2, Int(sr / 1000)), maxLag = min(m / 2, Int(sr / 70))
+        var energy: Float = 0
+        for i in 0..<(m - maxLag) { energy += d[i] * d[i] }
+        guard energy > 0, minLag < maxLag else { return (level, false, nil) }
+        // Correlation at every lag; take the shortest lag that is (nearly) as strong as the best,
+        // so a note isn't mistaken for the octave below it.
+        var cs = [Float](repeating: 0, count: maxLag + 2)
+        var best: Float = 0
+        for lag in minLag...maxLag {
+            var c: Float = 0
+            for i in 0..<(m - maxLag) { c += d[i] * d[i + lag] }
+            cs[lag] = c
+            best = max(best, c)
+        }
+        var bestLag = 0
+        for lag in (minLag + 1)..<maxLag where cs[lag] >= 0.88 * best && cs[lag] >= cs[lag - 1] && cs[lag] >= cs[lag + 1] {
+            bestLag = lag
+            break
+        }
+        guard bestLag > 0 else { return (level, false, nil) }
+        best = cs[bestLag]
+        let clarity = best / energy
+        guard clarity > 0.55, bestLag > 0 else { return (level, false, nil) }
+        return (level, true, Double(sr) / Double(bestLag))
+    }
+
+    /// Called ~10×/s. `wordDue` is true while one of the line's words should be sung.
+    func tick(lineIndex li: Int?, lineActive: Bool, wordDue: Bool, playing: Bool) {
         let now = Date()
         let dt = min(0.5, now.timeIntervalSince(lastTick))
         lastTick = now
-        guard running, lineActive else { return }
-        lineTime += dt
-        if level > 0.28 { sungTime += dt }
-        let s = Int((sungTime / max(1, lineTime) * 100).rounded())
-        if s != score { score = s }
+        guard running, playing else { return }
+        if li != lineIndex {
+            finishLine()
+            lineIndex = li
+        }
+        guard lineActive else { return }
+        if wordDue {
+            dueTime += dt
+            if voiced {
+                sungOnTime += dt
+                // Live points while you hit the words, boosted by your combo.
+                score += Int((25 * multiplier).rounded())
+            }
+        } else if voiced {
+            sungOffTime += dt
+        }
+    }
+
+    private func finishLine() {
+        defer { dueTime = 0; sungOnTime = 0; sungOffTime = 0; pitches = [] }
+        guard dueTime > 0.4 else { return }
+        totalDue += dueTime
+        totalOnTime += sungOnTime
+        accuracy = totalOnTime / max(0.001, totalDue)
+        // Coverage of the words, minus a little for singing in the gaps.
+        let acc = max(0, min(1, sungOnTime / dueTime - 0.5 * sungOffTime / max(dueTime, 1)))
+        // Steady notes (small pitch wobble, in semitones) earn a style bonus.
+        var steady = 0.0
+        if pitches.count > 5 {
+            let semis = pitches.map { 12 * log2($0 / 440) }
+            var wobble = 0.0
+            for k in 1..<semis.count { wobble += min(3, abs(semis[k] - semis[k - 1])) }
+            steady = max(0, 1 - wobble / Double(semis.count - 1) / 1.5)
+        }
+        let rating: Rating = acc >= 0.85 ? .perfect : acc >= 0.65 ? .great : acc >= 0.4 ? .good : .miss
+        let base: Double
+        switch rating { case .perfect: base = 1000; case .great: base = 700; case .good: base = 400; case .miss: base = 0 }
+        score += Int(((base * acc + 200 * steady * acc) * multiplier).rounded())
+        combo = rating == .miss ? 0 : combo + 1
+        lastRating = rating
+        ratingID += 1
     }
 }
 
@@ -1364,8 +1477,18 @@ private struct KaraokeView: View {
         }
         .onChange(of: music.track?.id) { _, _ in mic.reset() }
         .onReceive(Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()) { _ in
-            let line = clock.lineIndex.flatMap { i in music.lyrics.map { $0.lines[i] } }
-            mic.tick(lineActive: music.isPlaying && line.map { !$0.isInterlude } == true)
+            let li = clock.lineIndex
+            let lines = music.lyrics?.lines ?? []
+            let line = li.flatMap { $0 < lines.count ? lines[$0] : nil }
+            var due = false
+            if let li, let line, !line.isInterlude {
+                let end = li + 1 < lines.count ? lines[li + 1].time : line.time + 6
+                let t = music.lyricsTime
+                // A small grace window around each word, since nobody sings exactly on the beat.
+                due = WordTiming.spans(text: line.text, timed: line.words, start: line.time, end: end)
+                    .contains { t >= $0.start - 0.15 && t <= $0.start + $0.dur + 0.25 }
+            }
+            mic.tick(lineIndex: li, lineActive: line.map { !$0.isInterlude } == true, wordDue: due, playing: music.isPlaying)
         }
     }
 
@@ -1433,7 +1556,7 @@ private struct KaraokeView: View {
                     .background(Capsule().fill(mic.running ? Color.white : .white.opacity(0.14)))
             }
             .buttonStyle(.plain)
-            .help("Score how much you sing along (uses your microphone, nothing is recorded)")
+            .help("Scores your singing: on-time words, steady notes and combos. Uses your microphone; nothing is recorded. Headphones give the most accurate score.")
 
             if mic.running {
                 HStack(spacing: 3) {
@@ -1445,11 +1568,35 @@ private struct KaraokeView: View {
                 }
                 .animation(.easeOut(duration: 0.08), value: mic.level)
                 VStack(alignment: .leading, spacing: 0) {
-                    Text("\(mic.score)").font(.system(size: 26, weight: .heavy, design: .rounded)).foregroundStyle(.white)
+                    Text(mic.score.formatted()).font(.system(size: 26, weight: .heavy, design: .rounded)).foregroundStyle(.white)
                         .contentTransition(.numericText())
-                    Text("SCORE").font(.system(size: 9, weight: .bold)).foregroundStyle(.white.opacity(0.5))
+                        .monospacedDigit()
+                    HStack(spacing: 6) {
+                        Text("SCORE").font(.system(size: 9, weight: .bold)).foregroundStyle(.white.opacity(0.5))
+                        if mic.combo > 1 {
+                            Text("×\(mic.multiplier.formatted(.number.precision(.fractionLength(0...2)))) COMBO \(mic.combo)")
+                                .font(.system(size: 9, weight: .heavy)).foregroundStyle(.yellow)
+                        }
+                        if let a = mic.accuracy {
+                            Text("\(Int((a * 100).rounded()))% ON TIME").font(.system(size: 9, weight: .bold)).foregroundStyle(.white.opacity(0.5))
+                        }
+                    }
                 }
+                .frame(minWidth: 150, alignment: .leading)
                 .animation(.spring, value: mic.score)
+                .overlay(alignment: .top) {
+                    if let r = mic.lastRating {
+                        Text(r.rawValue)
+                            .font(.system(size: 22, weight: .black, design: .rounded))
+                            .foregroundStyle(r.color)
+                            .shadow(color: r.color.opacity(0.8), radius: 10)
+                            .id(mic.ratingID)
+                            .transition(.asymmetric(insertion: .scale(scale: 0.4).combined(with: .opacity),
+                                                    removal: .move(edge: .top).combined(with: .opacity)))
+                            .offset(y: -48)
+                    }
+                }
+                .animation(.spring(response: 0.35, dampingFraction: 0.6), value: mic.ratingID)
             } else if mic.denied {
                 Text("Allow the microphone in System Settings › Privacy").font(.system(size: 12)).foregroundStyle(.orange)
             }

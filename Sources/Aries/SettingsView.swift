@@ -7,7 +7,34 @@ private struct Pane: Identifiable, Hashable {
     let icon: String
     let color: Color
     var keywords: String = ""
+    var blurb: String { paneBlurbs[id] ?? "" }
+    /// Glow/tint color for the page (black and gray icons get a livelier accent).
+    var accent: Color {
+        switch id {
+        case "island": return Color(red: 0.32, green: 0.86, blue: 1.0)
+        case "general": return Color(red: 0.45, green: 0.58, blue: 0.85)
+        default: return color
+        }
+    }
 }
+
+private let paneBlurbs: [String: String] = [
+    "general": "Start-up, menu bar and the basics.",
+    "island": "Shape, glass and glow — make the notch yours.",
+    "widgets": "What lives inside the island.",
+    "desktop": "Widgets on your desktop and Lock Screen.",
+    "music": "How your music shows up in the notch.",
+    "spotify": "Connect Spotify, Apple Music and the web.",
+    "lyrics": "Karaoke, vinyl and word-by-word sync.",
+    "calls": "Answer calls and FaceTime from the notch.",
+    "popups": "Little moments, just like iPhone.",
+    "shortcuts": "Keys and gestures to drive Aries.",
+    "accessibility": "Motion, contrast and spoken feedback.",
+    "permissions": "Your data stays yours.",
+    "updates": "Always on the newest Aries.",
+    "patchnotes": "What's new, what's fixed, what's next.",
+    "about": "Made by Maxx Forge Studio.",
+]
 
 private let panes: [Pane] = [
     .init(id: "general", title: "General", icon: "gearshape.fill", color: .gray, keywords: "login startup menu bar haptics quit"),
@@ -48,24 +75,12 @@ struct SettingsView: View {
                 .frame(width: 250)
                 .background(GlassBackdrop(material: .sidebar))
             VStack(alignment: .leading, spacing: 0) {
-                HStack(spacing: 14) {
-                    Image(systemName: current.icon)
-                        .font(.system(size: 20, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 42, height: 42)
-                        .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(current.color.gradient))
-                        .shadow(color: current.color.opacity(0.35), radius: 8, y: 3)
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text("Settings  ›  \(current.title)")
-                            .font(.system(size: 11.5, weight: .medium)).foregroundStyle(.secondary)
-                        Text(current.title).font(.system(size: 26, weight: .bold))
-                    }
-                }
-                .padding(.horizontal, 30)
-                .padding(.top, 38)
-                .padding(.bottom, 4)
-                .id(pane)
-                .transition(.opacity.combined(with: .move(edge: .bottom)))
+                SettingsHero(pane: current)
+                    .padding(.horizontal, 22)
+                    .padding(.top, 34)
+                    .padding(.bottom, 6)
+                    .id(pane)
+                    .transition(.asymmetric(insertion: .settingsIn, removal: .opacity))
 
                 Group {
                     switch pane {
@@ -90,12 +105,19 @@ struct SettingsView: View {
                 .scrollContentBackground(.hidden)
                 .padding(.horizontal, 8)
                 .id(pane)
-                .transition(.opacity.combined(with: .offset(y: 12)))
+                .transition(.asymmetric(insertion: .settingsIn.animation(.spring(response: 0.5, dampingFraction: 0.86).delay(0.04)),
+                                        removal: .opacity.animation(.easeOut(duration: 0.12))))
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .background(Color(nsColor: .windowBackgroundColor).opacity(0.88))
+            .background(
+                ZStack {
+                    Color(nsColor: .windowBackgroundColor).opacity(0.9)
+                    SettingsAurora(color: current.accent)
+                }
+                .ignoresSafeArea()
+            )
         }
-        .animation(A11y.reduceMotion ? nil : .spring(response: 0.4, dampingFraction: 0.85), value: pane)
+        .animation(A11y.reduceMotion ? nil : .spring(response: 0.45, dampingFraction: 0.86), value: pane)
         .frame(minWidth: 820, minHeight: 600)
         .ignoresSafeArea()
     }
@@ -143,36 +165,10 @@ struct SettingsView: View {
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: 2) {
                     ForEach(filtered) { p in
-                        Button {
+                        SidebarRow(p: p, selected: pane == p.id, unread: p.id == "patchnotes" && patchNotes.hasUnread, ns: ns) {
                             pane = p.id
                             if filtered.count == 1 { search = "" }
-                        } label: {
-                            HStack(spacing: 10) {
-                                ZStack {
-                                    if pane == p.id {
-                                        Capsule().fill(Color.accentColor)
-                                            .frame(width: 3, height: 16)
-                                            .matchedGeometryEffect(id: "pill", in: ns)
-                                    }
-                                }
-                                .frame(width: 3)
-                                Image(systemName: p.icon)
-                                    .font(.system(size: 11, weight: .semibold))
-                                    .foregroundStyle(.white)
-                                    .frame(width: 24, height: 24)
-                                    .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(p.color.gradient))
-                                Text(p.title).font(.system(size: 13, weight: pane == p.id ? .semibold : .regular))
-                                Spacer()
-                                if p.id == "patchnotes" && patchNotes.hasUnread {
-                                    Circle().fill(Color.blue).frame(width: 8, height: 8)
-                                }
-                            }
-                            .padding(.vertical, 6).padding(.trailing, 8)
-                            .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(.primary.opacity(pane == p.id ? 0.09 : 0)))
-                            .contentShape(Rectangle())
                         }
-                        .buttonStyle(.plain)
                     }
                 }
                 .animation(.spring(response: 0.35, dampingFraction: 0.8), value: pane)
@@ -965,5 +961,163 @@ private struct DesktopWidgetsPane: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
+    }
+}
+
+// MARK: - Settings look & motion
+
+extension AnyTransition {
+    /// Pages float up into place, sharpening from a soft blur.
+    static var settingsIn: AnyTransition {
+        .modifier(active: SettleIn(progress: 0), identity: SettleIn(progress: 1))
+    }
+}
+
+private struct SettleIn: ViewModifier {
+    let progress: Double
+    func body(content: Content) -> some View {
+        content
+            .opacity(progress)
+            .offset(y: 18 * (1 - progress))
+            .scaleEffect(0.985 + 0.015 * progress, anchor: .top)
+            .blur(radius: 6 * (1 - progress))
+    }
+}
+
+/// Slowly drifting, softly glowing color behind each page, tinted by the page's own color.
+private struct SettingsAurora: View {
+    let color: Color
+    var body: some View {
+        if A11y.reduceMotion {
+            RadialGradient(colors: [color.opacity(0.18), .clear], center: .topTrailing, startRadius: 0, endRadius: 520)
+        } else {
+            TimelineView(.animation(minimumInterval: 1.0 / 20)) { tl in
+                let t = tl.date.timeIntervalSinceReferenceDate
+                GeometryReader { geo in
+                    let w = geo.size.width, h = geo.size.height
+                    ZStack {
+                        blob(color, 0.30, size: 460)
+                            .position(x: w * (0.78 + 0.08 * sin(t / 7)), y: h * (0.12 + 0.06 * cos(t / 9)))
+                        blob(Color(red: 0.32, green: 0.86, blue: 1.0), 0.16, size: 380)
+                            .position(x: w * (0.25 + 0.10 * cos(t / 11)), y: h * (0.05 + 0.05 * sin(t / 8)))
+                        blob(Color(red: 0.55, green: 0.35, blue: 1.0), 0.12, size: 520)
+                            .position(x: w * (0.55 + 0.12 * sin(t / 13)), y: h * (0.95 + 0.04 * cos(t / 10)))
+                    }
+                    .blur(radius: 70)
+                }
+            }
+            .animation(.easeInOut(duration: 0.8), value: color)
+            .allowsHitTesting(false)
+        }
+    }
+    private func blob(_ c: Color, _ a: Double, size: CGFloat) -> some View {
+        Circle().fill(c.opacity(a)).frame(width: size, height: size)
+    }
+}
+
+/// The big card at the top of each page: glowing icon, title, a one-line description and a light sweep.
+private struct SettingsHero: View {
+    let pane: Pane
+    @ViewState private var appeared = false
+
+    var body: some View {
+        HStack(spacing: 16) {
+            ZStack {
+                Circle().fill(pane.accent.opacity(0.45)).frame(width: 64, height: 64).blur(radius: 18)
+                Image(systemName: pane.icon)
+                    .font(.system(size: 24, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 52, height: 52)
+                    .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(pane.color.gradient))
+                    .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(.white.opacity(0.25), lineWidth: 0.8))
+                    .shadow(color: pane.accent.opacity(0.5), radius: 10, y: 4)
+                    .scaleEffect(appeared ? 1 : 0.6)
+                    .rotationEffect(.degrees(appeared ? 0 : -12))
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text("SETTINGS")
+                    .font(.system(size: 10, weight: .heavy)).tracking(2)
+                    .foregroundStyle(pane.accent.opacity(0.9))
+                Text(pane.title).font(.system(size: 28, weight: .bold, design: .rounded))
+                Text(pane.blurb).font(.system(size: 12.5)).foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 18).padding(.vertical, 14)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(LinearGradient(colors: [pane.accent.opacity(0.22), pane.accent.opacity(0.05)],
+                                     startPoint: .topLeading, endPoint: .bottomTrailing))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(LinearGradient(colors: [.white.opacity(0.22), .white.opacity(0.04)],
+                                             startPoint: .top, endPoint: .bottom), lineWidth: 0.8)
+        )
+        .overlay(Sheen(run: appeared).clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous)))
+        .onAppear {
+            guard !A11y.reduceMotion else { appeared = true; return }
+            withAnimation(.spring(response: 0.55, dampingFraction: 0.6).delay(0.05)) { appeared = true }
+        }
+    }
+}
+
+/// One soft light sweep across the hero card when a page opens.
+private struct Sheen: View {
+    let run: Bool
+    var body: some View {
+        GeometryReader { geo in
+            LinearGradient(colors: [.clear, .white.opacity(0.16), .clear], startPoint: .leading, endPoint: .trailing)
+                .frame(width: 140)
+                .rotationEffect(.degrees(18))
+                .offset(x: run ? geo.size.width + 160 : -200)
+                .animation(A11y.reduceMotion ? nil : .easeInOut(duration: 1.1).delay(0.15), value: run)
+        }
+        .allowsHitTesting(false)
+    }
+}
+
+/// A sidebar row with a hover glow; the selection highlight slides smoothly between rows.
+private struct SidebarRow: View {
+    let p: Pane
+    let selected: Bool
+    let unread: Bool
+    let ns: Namespace.ID
+    let action: () -> Void
+    @ViewState private var hover = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: p.icon)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 24, height: 24)
+                    .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(p.color.gradient))
+                    .shadow(color: p.accent.opacity(selected || hover ? 0.55 : 0), radius: 6)
+                    .scaleEffect(hover && !selected ? 1.08 : 1)
+                Text(p.title).font(.system(size: 13, weight: selected ? .semibold : .regular))
+                Spacer()
+                if unread {
+                    Circle().fill(Color.blue).frame(width: 8, height: 8)
+                        .shadow(color: .blue, radius: 4)
+                }
+            }
+            .padding(.vertical, 6).padding(.horizontal, 8)
+            .background {
+                if selected {
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(LinearGradient(colors: [p.accent.opacity(0.28), p.accent.opacity(0.10)],
+                                             startPoint: .leading, endPoint: .trailing))
+                        .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(p.accent.opacity(0.35), lineWidth: 0.8))
+                        .matchedGeometryEffect(id: "selection", in: ns)
+                } else if hover {
+                    RoundedRectangle(cornerRadius: 9, style: .continuous).fill(.primary.opacity(0.06))
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { h in withAnimation(.easeOut(duration: 0.15)) { hover = h } }
     }
 }
