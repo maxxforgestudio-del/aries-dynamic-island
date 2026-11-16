@@ -12,12 +12,16 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp .build/release/Aries "$APP/Contents/MacOS/Aries"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
-if [ ! -f build/AppIcon.icns ]; then
+if [ ! -f build/AppIcon.icns ] || [ Resources/Branding/AriesLogo.png -nt build/AppIcon.icns ] || [ scripts/make_icon.swift -nt build/AppIcon.icns ]; then
+  rm -rf build/AppIcon.iconset
   swift scripts/make_icon.swift build/AppIcon.iconset
   iconutil -c icns build/AppIcon.iconset -o build/AppIcon.icns
 fi
 cp build/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
-codesign --force --deep --sign - "$APP"
+cp Resources/Branding/*.png "$APP/Contents/Resources/"
+# Ad-hoc signature with a stable designated requirement (the bundle ID), so macOS keeps
+# permissions (Automation, Accessibility, Calendars…) across updates instead of re-asking.
+codesign --force --deep --sign - -r='designated => identifier "app.aries.dynamicisland"' "$APP"
 echo "Built $APP"
 if [ "$1" = "--zip" ]; then
   VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" Resources/Info.plist)

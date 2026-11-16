@@ -1,8 +1,9 @@
 import SwiftUI
 import AppKit
 
-/// Aries, a little ram who lives in your notch. Blinks, follows your cursor,
-/// bobs along to music and gets sleepy late at night.
+/// Aries, the little ram who lives in your notch (2.0 "Aquatic" design).
+/// Blinks, follows your cursor, wears headphones while music plays, dozes at night,
+/// worries when the battery is low, and sends hearts when you tap it.
 struct BuddyView: View {
     enum Mood { case happy, vibing, sleepy, low }
 
@@ -10,128 +11,213 @@ struct BuddyView: View {
     var accent: Color
     var size: CGFloat = 64
 
-    @ViewState private var poke = 0.0
+    @ViewState private var boop = 0.0
+    @ViewState private var hearts: [Double] = []
 
-    private let wool = Color(red: 0.98, green: 0.96, blue: 0.93)
-    private let face = Color(red: 0.99, green: 0.88, blue: 0.80)
-    private let horn = Color(red: 0.86, green: 0.68, blue: 0.52)
+    private let woolLight = Color(red: 1.0, green: 0.98, blue: 1.0)
+    private let woolShade = Color(red: 0.86, green: 0.84, blue: 0.97)
+    private let skin = Color(red: 1.0, green: 0.87, blue: 0.80)
+    private let skinShade = Color(red: 0.96, green: 0.74, blue: 0.68)
+    private let hornA = Color(red: 1.0, green: 0.84, blue: 0.48)
+    private let hornB = Color(red: 0.78, green: 0.55, blue: 0.30)
+    private let ink = Color(red: 0.13, green: 0.12, blue: 0.22)
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30)) { tl in
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: A11y.reduceMotion)) { tl in
             let t = tl.date.timeIntervalSinceReferenceDate
-            let bob = mood == .vibing ? sin(t * 2 * .pi * 1.8) * size * 0.05 : sin(t * 1.3) * size * 0.015
-            let tilt = mood == .vibing ? sin(t * 2 * .pi * 0.9) * 6 : 0
-            let blink = isBlinking(t) || mood == .sleepy
+            let still = A11y.reduceMotion
+            let bob = still ? 0 : (mood == .vibing ? sin(t * 2 * .pi * 1.8) * size * 0.05 : sin(t * 1.4) * size * 0.012)
+            let tilt = still ? 0 : (mood == .vibing ? sin(t * 2 * .pi * 0.9) * 7 : sin(t * 0.7) * 1.5)
+            let breathe = still ? 1 : 1 + sin(t * 2.1) * 0.012
+            let blink = !still && isBlinking(t)
             let look = lookOffset()
 
             ZStack {
-                // Horns (ram curls)
-                hornView.offset(x: -size * 0.40, y: -size * 0.02)
-                hornView.scaleEffect(x: -1, y: 1).offset(x: size * 0.40, y: -size * 0.02)
+                // Soft shadow
+                Ellipse().fill(.black.opacity(0.35)).frame(width: size * 0.62, height: size * 0.09)
+                    .blur(radius: 3).offset(y: size * 0.47)
 
-                // Head
-                Ellipse()
-                    .fill(LinearGradient(colors: [face, face.opacity(0.92)], startPoint: .top, endPoint: .bottom))
-                    .frame(width: size * 0.72, height: size * 0.66)
-                    .offset(y: size * 0.06)
+                ZStack {
+                    horn.offset(x: -size * 0.39, y: size * 0.02).rotationEffect(.degrees(still ? 0 : sin(t * 1.1) * 3))
+                    horn.scaleEffect(x: -1, y: 1).offset(x: size * 0.39, y: size * 0.02)
+                        .rotationEffect(.degrees(still ? 0 : -sin(t * 1.1) * 3))
 
-                // Wool tuft
-                ForEach(0..<5, id: \.self) { i in
-                    Circle()
-                        .fill(wool)
-                        .frame(width: size * 0.24, height: size * 0.24)
-                        .offset(x: size * (-0.2 + 0.1 * Double(i)),
-                                y: -size * 0.24 + (i % 2 == 0 ? 0 : -size * 0.04))
+                    // Fluffy head of wool
+                    ZStack {
+                        ForEach(0..<9, id: \.self) { i in
+                            let a = Double(i) / 9 * 2 * .pi
+                            Circle()
+                                .fill(RadialGradient(colors: [woolLight, woolShade], center: .topLeading,
+                                                     startRadius: 0, endRadius: size * 0.22))
+                                .frame(width: size * 0.3, height: size * 0.3)
+                                .offset(x: cos(a) * size * 0.25, y: sin(a) * size * 0.22 - size * 0.04)
+                        }
+                        Circle().fill(woolLight).frame(width: size * 0.6, height: size * 0.56).offset(y: -size * 0.03)
+                    }
+
+                    // Face
+                    Ellipse()
+                        .fill(LinearGradient(colors: [skin, skinShade], startPoint: .top, endPoint: .bottom))
+                        .frame(width: size * 0.56, height: size * 0.5)
+                        .offset(y: size * 0.09)
+                        .shadow(color: .black.opacity(0.08), radius: 1, y: 1)
+
+                    // Fringe tuft
+                    HStack(spacing: -size * 0.05) {
+                        ForEach(0..<3, id: \.self) { _ in
+                            Circle().fill(woolLight).frame(width: size * 0.17)
+                        }
+                    }
+                    .offset(y: -size * 0.13)
+
+                    eyes(blink: blink, look: look).offset(y: size * 0.07)
+
+                    // Cheeks
+                    HStack(spacing: size * 0.3) {
+                        Circle().fill(Color.pink.opacity(0.5)).frame(width: size * 0.09)
+                        Circle().fill(Color.pink.opacity(0.5)).frame(width: size * 0.09)
+                    }
+                    .blur(radius: 0.6)
+                    .offset(y: size * 0.18)
+
+                    mouth.offset(y: size * 0.23)
+
+                    if mood == .vibing { headphones }
+                    if mood == .low {
+                        Image(systemName: "drop.fill")
+                            .font(.system(size: size * 0.1))
+                            .foregroundStyle(.cyan.opacity(0.85))
+                            .offset(x: size * 0.25, y: -size * 0.02)
+                    }
                 }
-
-                // Eyes
-                HStack(spacing: size * 0.17) {
-                    eye(blink: blink, look: look)
-                    eye(blink: blink, look: look)
-                }
-                .offset(y: size * 0.04)
-
-                // Cheeks
-                HStack(spacing: size * 0.36) {
-                    Circle().fill(Color.pink.opacity(0.45)).frame(width: size * 0.1)
-                    Circle().fill(Color.pink.opacity(0.45)).frame(width: size * 0.1)
-                }
-                .offset(y: size * 0.16)
-
-                mouth.offset(y: size * 0.22)
+                .scaleEffect(breathe)
+                .rotationEffect(.degrees(tilt + boop * sin(t * 28) * 9))
+                .offset(y: bob - boop * size * 0.06)
 
                 if mood == .sleepy {
-                    Text("z")
-                        .font(.system(size: size * 0.2, weight: .heavy, design: .rounded))
-                        .foregroundStyle(.white.opacity(0.8))
-                        .offset(x: size * 0.42, y: -size * 0.36 - CGFloat((t * 8).truncatingRemainder(dividingBy: 8)))
-                        .opacity(1 - (t * 1).truncatingRemainder(dividingBy: 1))
+                    ForEach(0..<2, id: \.self) { i in
+                        let phase = (t * 0.5 + Double(i) * 0.5).truncatingRemainder(dividingBy: 1)
+                        Text("z")
+                            .font(.system(size: size * (0.14 + 0.06 * Double(i)), weight: .heavy, design: .rounded))
+                            .foregroundStyle(.white.opacity(0.85 * (1 - phase)))
+                            .offset(x: size * (0.36 + phase * 0.12), y: -size * (0.26 + phase * 0.28))
+                    }
                 }
-                if mood == .vibing {
+                if mood == .vibing && !still {
                     Image(systemName: "music.note")
-                        .font(.system(size: size * 0.2, weight: .bold))
+                        .font(.system(size: size * 0.17, weight: .bold))
                         .foregroundStyle(accent)
-                        .offset(x: size * 0.46, y: -size * 0.3 + sin(t * 3) * 3)
+                        .offset(x: size * 0.5, y: -size * 0.32 + sin(t * 3) * 3)
                         .rotationEffect(.degrees(sin(t * 2) * 12))
                 }
+                ForEach(Array(hearts.enumerated()), id: \.offset) { i, born in
+                    let age = t - born
+                    if age < 1.2 {
+                        Image(systemName: "heart.fill")
+                            .font(.system(size: size * 0.14))
+                            .foregroundStyle(.pink)
+                            .opacity(1 - age / 1.2)
+                            .offset(x: (Double(i % 3) - 1) * size * 0.25 + sin(age * 6 + Double(i)) * 3,
+                                    y: -size * 0.3 - age * size * 0.5)
+                            .scaleEffect(0.6 + age * 0.5)
+                    }
+                }
             }
-            .frame(width: size * 1.2, height: size * 1.1)
-            .rotationEffect(.degrees(tilt + poke * sin(t * 30) * 8))
-            .offset(y: bob)
-            .scaleEffect(1 + poke * 0.12)
+            .frame(width: size * 1.25, height: size * 1.15)
         }
         .contentShape(Rectangle())
         .onTapGesture {
-            // Boop!
-            withAnimation(.spring(response: 0.2, dampingFraction: 0.4)) { poke = 1 }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                withAnimation(.spring(response: 0.4, dampingFraction: 0.6)) { poke = 0 }
+            let now = Date().timeIntervalSinceReferenceDate
+            hearts = [now, now + 0.08, now + 0.16]
+            withAnimation(.spring(response: 0.2, dampingFraction: 0.35)) { boop = 1 }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.32) {
+                withAnimation(.spring(response: 0.45, dampingFraction: 0.55)) { boop = 0 }
             }
+            if Prefs.bool(Prefs.haptics) { NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now) }
         }
+        .accessibilityLabel("Aries the ram, \(moodLabel)")
     }
 
-    private var hornView: some View {
-        ZStack {
-            Circle().trim(from: 0.05, to: 0.9)
-                .stroke(horn, style: StrokeStyle(lineWidth: size * 0.09, lineCap: .round))
-                .frame(width: size * 0.26, height: size * 0.26)
-            Circle().trim(from: 0.3, to: 0.95)
-                .stroke(horn.opacity(0.85), style: StrokeStyle(lineWidth: size * 0.06, lineCap: .round))
-                .frame(width: size * 0.11, height: size * 0.11)
-        }
-        .rotationEffect(.degrees(-30))
+    private var moodLabel: String {
+        switch mood { case .happy: "happy"; case .vibing: "listening to music"; case .sleepy: "sleepy"; case .low: "worried about the battery" }
     }
 
-    private func eye(blink: Bool, look: CGSize) -> some View {
-        ZStack {
-            Capsule()
-                .fill(Color(white: 0.12))
-                .frame(width: size * 0.11, height: blink ? size * 0.025 : size * 0.15)
-            if !blink {
-                Circle().fill(.white)
-                    .frame(width: size * 0.045)
-                    .offset(x: -size * 0.015 + look.width * 0.3, y: -size * 0.03 + look.height * 0.3)
+    private var horn: some View {
+        RamHorn()
+            .stroke(LinearGradient(colors: [hornA, hornB], startPoint: .top, endPoint: .bottom),
+                    style: StrokeStyle(lineWidth: size * 0.085, lineCap: .round, lineJoin: .round))
+            .frame(width: size * 0.3, height: size * 0.3)
+            .shadow(color: .black.opacity(0.15), radius: 1, y: 1)
+    }
+
+    private func eyes(blink: Bool, look: CGSize) -> some View {
+        let closedHappy = mood == .vibing
+        let lidded = mood == .sleepy
+        return HStack(spacing: size * 0.14) {
+            ForEach(0..<2, id: \.self) { _ in
+                ZStack {
+                    if closedHappy || lidded || blink {
+                        // ^ ^ happy arcs or sleepy lids
+                        ArcShape(up: closedHappy)
+                            .stroke(ink, style: StrokeStyle(lineWidth: size * 0.032, lineCap: .round))
+                            .frame(width: size * 0.12, height: size * 0.06)
+                    } else {
+                        Ellipse().fill(ink).frame(width: size * 0.13, height: size * 0.16)
+                        Circle().fill(.white).frame(width: size * 0.055)
+                            .offset(x: -size * 0.022 + look.width * 0.4, y: -size * 0.035 + look.height * 0.4)
+                        Circle().fill(.white.opacity(0.8)).frame(width: size * 0.022)
+                            .offset(x: size * 0.03 + look.width * 0.4, y: size * 0.035 + look.height * 0.4)
+                    }
+                }
+                .frame(width: size * 0.14, height: size * 0.17)
+                .offset(x: (closedHappy || lidded || blink) ? 0 : look.width, y: (closedHappy || lidded || blink) ? 0 : look.height)
+                .overlay(alignment: .top) {
+                    if mood == .low {
+                        Capsule().fill(ink).frame(width: size * 0.1, height: size * 0.022)
+                            .rotationEffect(.degrees(-12)).offset(y: -size * 0.05)
+                    }
+                }
             }
         }
-        .offset(x: blink ? 0 : look.width, y: blink ? 0 : look.height)
     }
 
     private var mouth: some View {
-        Path { p in
-            let w = size * 0.12
+        Group {
             switch mood {
             case .low:
-                p.move(to: CGPoint(x: -w / 2, y: w * 0.25))
-                p.addQuadCurve(to: CGPoint(x: w / 2, y: w * 0.25), control: CGPoint(x: 0, y: -w * 0.2))
+                ArcShape(up: true)
+                    .stroke(ink, style: StrokeStyle(lineWidth: size * 0.028, lineCap: .round))
+                    .frame(width: size * 0.1, height: size * 0.035)
             case .sleepy:
-                p.addEllipse(in: CGRect(x: -w * 0.18, y: -w * 0.1, width: w * 0.36, height: w * 0.36))
-            default:
-                p.move(to: CGPoint(x: -w / 2, y: 0))
-                p.addQuadCurve(to: CGPoint(x: w / 2, y: 0), control: CGPoint(x: 0, y: w * (mood == .vibing ? 0.9 : 0.6)))
+                Ellipse().fill(ink.opacity(0.85)).frame(width: size * 0.05, height: size * 0.06)
+            case .vibing:
+                ZStack {
+                    HalfCircle().fill(ink).frame(width: size * 0.13, height: size * 0.08)
+                    HalfCircle().fill(Color.pink).frame(width: size * 0.07, height: size * 0.035).offset(y: size * 0.018)
+                }
+            case .happy:
+                ArcShape(up: false)
+                    .stroke(ink, style: StrokeStyle(lineWidth: size * 0.028, lineCap: .round))
+                    .frame(width: size * 0.12, height: size * 0.045)
             }
         }
-        .stroke(Color(white: 0.15), style: StrokeStyle(lineWidth: size * 0.03, lineCap: .round))
-        .frame(width: 1, height: 1)
+    }
+
+    private var headphones: some View {
+        ZStack {
+            Circle()
+                .trim(from: 0.55, to: 0.95)
+                .stroke(accent.gradient, style: StrokeStyle(lineWidth: size * 0.06, lineCap: .round))
+                .frame(width: size * 0.8, height: size * 0.8)
+                .offset(y: size * 0.08)
+            HStack(spacing: size * 0.6) {
+                RoundedRectangle(cornerRadius: size * 0.06).fill(accent.gradient)
+                    .frame(width: size * 0.13, height: size * 0.2)
+                RoundedRectangle(cornerRadius: size * 0.06).fill(accent.gradient)
+                    .frame(width: size * 0.13, height: size * 0.2)
+            }
+            .offset(y: size * 0.12)
+        }
     }
 
     private func isBlinking(_ t: Double) -> Bool {
@@ -148,7 +234,46 @@ struct BuddyView: View {
         let origin = CGPoint(x: screen.frame.midX - 180, y: screen.frame.maxY - 90)
         let dx = max(-1, min(1, (m.x - origin.x) / 300))
         let dy = max(-1, min(1, (origin.y - m.y) / 200))
-        return CGSize(width: dx * size * 0.035, height: dy * size * 0.03)
+        return CGSize(width: dx * size * 0.03, height: dy * size * 0.025)
+    }
+}
+
+/// A curled ram horn (spiral).
+struct RamHorn: Shape {
+    func path(in r: CGRect) -> Path {
+        var p = Path()
+        let c = CGPoint(x: r.midX, y: r.midY)
+        let maxR = min(r.width, r.height) / 2
+        let steps = 90
+        for i in 0...steps {
+            let f = Double(i) / Double(steps)
+            let ang = -.pi / 2 - f * 1.75 * 2 * .pi
+            let rad = maxR * (1 - f * 0.78)
+            let pt = CGPoint(x: c.x + cos(ang) * rad, y: c.y + sin(ang) * rad)
+            i == 0 ? p.move(to: pt) : p.addLine(to: pt)
+        }
+        return p
+    }
+}
+
+struct ArcShape: Shape {
+    var up: Bool
+    func path(in r: CGRect) -> Path {
+        var p = Path()
+        p.move(to: CGPoint(x: r.minX, y: up ? r.maxY : r.minY))
+        p.addQuadCurve(to: CGPoint(x: r.maxX, y: up ? r.maxY : r.minY),
+                       control: CGPoint(x: r.midX, y: up ? r.minY - r.height : r.maxY + r.height))
+        return p
+    }
+}
+
+struct HalfCircle: Shape {
+    func path(in r: CGRect) -> Path {
+        var p = Path()
+        p.move(to: CGPoint(x: r.minX, y: r.minY))
+        p.addLine(to: CGPoint(x: r.maxX, y: r.minY))
+        p.addQuadCurve(to: CGPoint(x: r.minX, y: r.minY), control: CGPoint(x: r.midX, y: r.maxY + r.height * 0.6))
+        return p
     }
 }
 

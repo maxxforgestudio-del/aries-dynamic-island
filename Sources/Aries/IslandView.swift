@@ -13,17 +13,29 @@ struct IslandRootView: View {
             if showNotes {
                 MusicNotesView(
                     islandWidth: model.totalSize.width,
-                    islandHeight: model.notchSize.height,
+                    islandHeight: model.totalSize.height,
                     color: music.accent,
                     intensity: intensity,
-                    active: music.isPlaying && !model.isExpanded && model.compact == .music
+                    active: music.isPlaying && !model.isExpanded && model.compact == .music && !A11y.reduceMotion
                 )
                 .allowsHitTesting(false)
             }
             IslandView(model: model, music: music)
-            ConfettiView(trigger: model.celebration, originY: model.totalSize.height - 4)
+            if let sec = model.secondary {
+                let d = model.notchSize.height
+                SecondaryBubble(model: model, kind: sec, diameter: d)
+                    .offset(x: model.totalSize.width / 2 + 7 + d / 2 - 0.5 + model.nudge)
+                    .id(sec)
+                    .transition(.asymmetric(
+                        insertion: .scale(scale: 0.2, anchor: .leading).combined(with: .opacity).combined(with: .offset(x: -d)),
+                        removal: .scale(scale: 0.2, anchor: .leading).combined(with: .opacity).combined(with: .offset(x: -d))))
+            }
+            if !A11y.reduceMotion {
+                ConfettiView(trigger: model.celebration, originY: model.totalSize.height - 4)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .animation(.spring(response: 0.5, dampingFraction: 0.68), value: model.secondary)
         .environment(\.colorScheme, .dark)
     }
 }
@@ -32,17 +44,21 @@ struct IslandView: View {
     @ObservedObject var model: IslandModel
     @ObservedObject var music: MusicController
     @AppStorage(Prefs.musicGlow) private var musicGlow = true
+    @Namespace private var ns
 
     var body: some View {
         let shape = NotchShape(topRadius: model.ear, bottomRadius: model.bottomRadius)
         let size = model.totalSize
         let glow = musicGlow && !model.isExpanded && model.compact == .music && music.isPlaying
-        let squish = model.isHovering && !model.isExpanded
+        let squish = model.isHovering && !model.isExpanded && !A11y.reduceMotion
+        let k = model.isExpanded ? A11y.scale : 1
 
         ZStack(alignment: .top) {
-            shape.fill(.black)
+            IslandSurface(shape: shape, expanded: model.isExpanded, notchHeight: model.notchSize.height, accent: music.accent)
             content
                 .padding(.horizontal, model.ear)
+                .frame(width: size.width / k, height: size.height / k, alignment: .top)
+                .scaleEffect(k, anchor: .top)
                 .frame(width: size.width, height: size.height, alignment: .top)
             if model.dropTargeted {
                 shape.stroke(music.accent.opacity(0.9), lineWidth: 2)
@@ -52,17 +68,19 @@ struct IslandView: View {
         .frame(width: size.width, height: size.height)
         .clipShape(shape)
         .background {
-            if glow {
+            if glow && !A11y.reduceMotion {
                 shape.fill(.black)
                     .phaseAnimator([0.12, 0.5]) { c, p in
                         c.shadow(color: music.accent.opacity(p), radius: 11, y: 1)
                     } animation: { _ in .easeInOut(duration: 1.7) }
-            } else {
-                shape.fill(.black)
-                    .shadow(color: .black.opacity(model.isExpanded ? 0.5 : 0), radius: 20, y: 8)
             }
         }
+        .shadow(color: .black.opacity(model.isExpanded ? 0.45 : 0), radius: 22, y: 10)
+        .environment(\.islandNamespace, ns)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Aries Dynamic Island")
         .scaleEffect(x: squish ? 1.05 : 1, y: squish ? 1.12 : 1, anchor: .top)
+        .offset(x: model.nudge)
         .contentShape(shape)
         .onTapGesture { model.tap() }
         .onDrop(of: [.fileURL], isTargeted: $model.dropTargeted) { providers in
@@ -90,16 +108,22 @@ struct IslandView: View {
         if model.isExpanded {
             ExpandedView(model: model, music: music)
                 .transition(.asymmetric(
-                    insertion: .opacity.combined(with: .scale(scale: 0.86, anchor: .top))
-                        .animation(.spring(response: 0.42, dampingFraction: 0.72).delay(0.05)),
-                    removal: .opacity.animation(.easeOut(duration: 0.12))))
+                    insertion: AnyTransition.islandContent(scale: 0.88)
+                        .animation(.spring(response: 0.45, dampingFraction: 0.78).delay(0.04)),
+                    removal: AnyTransition.islandContent(scale: 0.94).animation(.easeOut(duration: 0.16))))
         } else {
             switch model.compact {
             case .music:
-                CompactMusicView(music: music, timer: model.timer, notch: model.notchSize)
+                CompactMusicView(music: music, timer: model.timer, notch: model.notchSize, strip: model.showsLyricStrip)
                     .transition(.opacity.combined(with: .blurReplace))
             case .timer:
                 CompactTimerView(timer: model.timer, notch: model.notchSize)
+                    .transition(.opacity.combined(with: .blurReplace))
+            case .download:
+                CompactDownloadView(downloads: model.downloads, notch: model.notchSize)
+                    .transition(.opacity.combined(with: .blurReplace))
+            case .activity:
+                CompactActivityView(live: model.live, notch: model.notchSize)
                     .transition(.opacity.combined(with: .blurReplace))
             case .call:
                 CompactCallView(calls: model.calls, notch: model.notchSize)
@@ -138,11 +162,26 @@ struct CompactMusicView: View {
     @ObservedObject var music: MusicController
     @ObservedObject var timer: TimerModel
     let notch: CGSize
+    var strip = false
     @AppStorage(Prefs.showVisualizer) private var showVisualizer = true
 
     var body: some View {
+        VStack(spacing: 0) {
+            wings
+            if strip {
+                LyricStrip(music: music, clock: music.clock)
+                    .frame(height: 22)
+                    .padding(.horizontal, 16)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .animation(.spring(response: 0.45, dampingFraction: 0.8), value: strip)
+    }
+
+    private var wings: some View {
         Wings(notch: notch) {
             ArtworkView(image: music.artwork, size: notch.height - 10, radius: 6, accent: music.accent)
+                .islandMatched("art")
                 .id(music.track?.id)
                 .transition(.scale(scale: 0.3).combined(with: .opacity))
                 .padding(.leading, 9)
@@ -150,7 +189,7 @@ struct CompactMusicView: View {
                 .scaleEffect(music.isPlaying ? 1 : 0.85)
         } right: {
             Group {
-                if timer.isActive {
+                if false {
                     TimelineView(.periodic(from: .now, by: 1)) { ctx in
                         Text(TimerModel.format(timer.remaining(at: ctx.date)))
                             .font(.system(size: 11, weight: .bold, design: .rounded))
@@ -171,6 +210,89 @@ struct CompactMusicView: View {
         }
         .animation(.spring(response: 0.45, dampingFraction: 0.6), value: music.track?.id)
         .animation(.spring(response: 0.4, dampingFraction: 0.6), value: music.isPlaying)
+    }
+}
+
+/// The current lyric, gliding along under the notch.
+struct LyricStrip: View {
+    @ObservedObject var music: MusicController
+    @ObservedObject var clock: LyricsClock
+
+    var body: some View {
+        let line: String = {
+            guard let l = music.lyrics, l.synced, let i = clock.lineIndex else { return "" }
+            return l.lines[i].text
+        }()
+        ZStack {
+            if line.isEmpty {
+                HStack(spacing: 5) {
+                    ForEach(0..<3, id: \.self) { i in
+                        Circle().fill(.white.opacity(0.5)).frame(width: 4, height: 4)
+                            .phaseAnimator([0.35, 1.0]) { c, p in c.opacity(p) } animation: { _ in
+                                .easeInOut(duration: 0.6).delay(Double(i) * 0.2)
+                            }
+                    }
+                }
+                .transition(.opacity)
+            } else {
+                Text(line)
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .foregroundStyle(LinearGradient(colors: [.white, music.accent], startPoint: .leading, endPoint: .trailing))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                    .id(line)
+                    .transition(.asymmetric(insertion: .move(edge: .bottom).combined(with: .opacity).combined(with: .scale(scale: 0.9)),
+                                            removal: .move(edge: .top).combined(with: .opacity)))
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .clipped()
+        .animation(.spring(response: 0.45, dampingFraction: 0.82), value: line)
+    }
+}
+
+struct CompactDownloadView: View {
+    @ObservedObject var downloads: DownloadsMonitor
+    let notch: CGSize
+
+    var body: some View {
+        let item = downloads.current
+        Wings(notch: notch) {
+            ZStack {
+                Circle().stroke(.green.opacity(0.25), lineWidth: 2.5)
+                if let p = item?.progress {
+                    Circle().trim(from: 0, to: p)
+                        .stroke(.green, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                        .animation(.easeOut(duration: 0.4), value: p)
+                } else {
+                    Circle().trim(from: 0, to: 0.3)
+                        .stroke(.green, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                        .phaseAnimator([0.0, 360.0]) { c, a in c.rotationEffect(.degrees(a)) } animation: { _ in .linear(duration: 1).repeatForever(autoreverses: false) }
+                }
+                Image(systemName: "arrow.down")
+                    .font(.system(size: 7, weight: .black))
+                    .foregroundStyle(.green)
+            }
+            .frame(width: 16, height: 16)
+            .padding(.leading, 12)
+        } right: {
+            Group {
+                if let p = item?.progress {
+                    Text("\(Int(p * 100))%")
+                } else {
+                    Text(DownloadsMonitor.format(item?.bytes ?? 0))
+                }
+            }
+            .font(.system(size: 11.5, weight: .bold, design: .rounded))
+            .foregroundStyle(.green)
+            .monospacedDigit()
+            .contentTransition(.numericText())
+            .lineLimit(1)
+            .fixedSize()
+            .padding(.trailing, 12)
+            .help(item?.name ?? "")
+        }
     }
 }
 
@@ -306,7 +428,7 @@ struct ExpandedView: View {
             Wings(notch: model.notchSize) {
                 TabBar(model: model).padding(.leading, 16)
             } right: {
-                StatusCluster(system: model.system).padding(.trailing, 18)
+                StatusCluster(system: model.system, tools: model.tools, focus: model.focusMode).padding(.trailing, 18)
             }
             ZStack(alignment: .top) {
                 switch model.tab {
@@ -315,7 +437,8 @@ struct ExpandedView: View {
                 case .music: MusicTab(model: model, music: music).transition(tabTransition)
                 case .notes: NotesTab(model: model, notes: model.notes).transition(tabTransition)
                 case .shelf: ShelfTab(model: model, shelf: model.shelf).transition(tabTransition)
-                case .timer: TimerTab(timer: model.timer).transition(tabTransition)
+                case .timer: TimerTab(timer: model.timer, focus: model.focus).transition(tabTransition)
+                case .tools: ToolsTab(model: model, tools: model.tools).transition(tabTransition)
                 case .clipboard: ClipboardTab(clipboard: model.clipboard, model: model).transition(tabTransition)
                 case .mirror: MirrorTab(camera: model.mirror).transition(tabTransition)
                 }
@@ -376,8 +499,19 @@ private struct TabBar: View {
 
 struct StatusCluster: View {
     @ObservedObject var system: SystemMonitor
+    @ObservedObject var tools: ToolsModel
+    @ObservedObject var focus: FocusMonitor
     var body: some View {
         HStack(spacing: 8) {
+            if let f = focus.current {
+                Image(systemName: f.symbol).foregroundStyle(f.color)
+                    .help("\(f.name) Focus is on")
+                    .transition(.scale.combined(with: .opacity))
+            }
+            if tools.isAwake {
+                Image(systemName: "cup.and.saucer.fill").foregroundStyle(.orange)
+                    .help("Keep Awake is on")
+            }
             if system.micActive && Prefs.bool(Prefs.showMic) {
                 Image(systemName: "mic.fill").foregroundStyle(.orange)
                     .help(system.micApp.map { "Microphone in use by \($0)" } ?? "Microphone in use")
@@ -406,6 +540,7 @@ private struct HomeTab: View {
     @ObservedObject var music: MusicController
     @ObservedObject var calendar: CalendarModel
     @ObservedObject var weather: WeatherModel
+    @ObservedObject private var updater = Updater.shared
     @AppStorage(Prefs.showBuddy) private var showBuddy = true
     @AppStorage(Prefs.showCalendar) private var showCalendar = true
     @AppStorage(Prefs.showWeather) private var showWeather = true
@@ -445,7 +580,24 @@ private struct HomeTab: View {
             }
             Spacer(minLength: 6)
             VStack(spacing: 6) {
-                if showCalendar { eventCard }
+                if updater.state == .available, let v = updater.latestVersion {
+                Button { AppDelegate.shared.openSettings(pane: "updates") } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrow.down.app.fill").foregroundStyle(.blue)
+                        Text("Aries \(v) is available").foregroundStyle(.white)
+                        Spacer()
+                        Text("Update").foregroundStyle(.blue)
+                    }
+                    .font(.system(size: 11.5, weight: .bold, design: .rounded))
+                    .padding(.horizontal, 10).padding(.vertical, 6)
+                    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(.blue.opacity(0.15)))
+                }
+                .buttonStyle(.plain)
+            }
+            ForEach(model.live.activities.suffix(2)) { a in
+                LiveActivityCard(activity: a) { model.live.end(a.id) }
+            }
+            if showCalendar { eventCard }
                 if model.notes.openCount > 0, Prefs.bool(Prefs.showNotesTab) {
                     Button { model.select(.notes) } label: {
                         HStack(spacing: 6) {
@@ -664,12 +816,15 @@ private struct ShelfTile: View {
 
 private struct TimerTab: View {
     @ObservedObject var timer: TimerModel
+    @ObservedObject var focus: FocusModel
     @AppStorage(Prefs.lastTimerMinutes) private var custom = 10.0
-    private let presets: [Double] = [1, 3, 5, 10, 15, 25, 45, 60]
+    private let presets: [Double] = [1, 5, 10, 15, 30, 60]
 
     var body: some View {
         Group {
-            if timer.isActive { running } else { picker }
+            if timer.isActive { running }
+            else if focus.stopwatchActive { stopwatch }
+            else { picker }
         }
         .padding(.horizontal, 22)
         .padding(.top, 10)
@@ -690,6 +845,24 @@ private struct TimerTab: View {
                     }
                     .buttonStyle(PressableStyle(hoverFill: .clear))
                 }
+                Button { focus.startFocus(timer) } label: {
+                    Label("Focus", systemImage: "brain.head.profile")
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .foregroundStyle(.purple)
+                        .padding(.horizontal, 10).frame(height: 28)
+                        .background(Capsule().fill(.purple.opacity(0.18)))
+                }
+                .buttonStyle(PressableStyle(hoverFill: .clear))
+                .help("25 min focus, 5 min break, repeating")
+                Button { focus.toggleStopwatch() } label: {
+                    Image(systemName: "stopwatch.fill")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(.yellow)
+                        .frame(width: 34, height: 28)
+                        .background(Capsule().fill(.yellow.opacity(0.16)))
+                }
+                .buttonStyle(PressableStyle(hoverFill: .clear))
+                .help("Stopwatch")
             }
             HStack(spacing: 10) {
                 Image(systemName: "timer").font(.system(size: 18, weight: .semibold)).foregroundStyle(.orange)
@@ -749,7 +922,9 @@ private struct TimerTab: View {
                         .monospacedDigit()
                         .contentTransition(.numericText(countsDown: true))
                         .animation(.snappy, value: Int(timer.remaining(at: ctx.date)))
-                    Text(timer.isRunning ? "Ends at \((Date().addingTimeInterval(timer.remaining())).formatted(date: .omitted, time: .shortened))"
+                    Text(focus.phase == .focus ? "Focus · round \(focus.round)" :
+                         focus.phase == .rest ? "Break · round \(focus.round)" :
+                         timer.isRunning ? "Ends at \((Date().addingTimeInterval(timer.remaining())).formatted(date: .omitted, time: .shortened))"
                                          : "Paused")
                         .font(.system(size: 12, weight: .semibold, design: .rounded))
                         .foregroundStyle(.white.opacity(0.5))
@@ -761,8 +936,30 @@ private struct TimerTab: View {
                                  .orange.opacity(0.22), .orange) {
                         timer.isRunning ? timer.pause() : timer.resume()
                     }
-                    circleButton("xmark", "Stop", .white.opacity(0.14), .white) { timer.stop() }
+                    circleButton("xmark", "Stop", .white.opacity(0.14), .white) {
+                        if focus.phase != .off { focus.stopFocus(timer) } else { timer.stop() }
+                    }
                 }
+            }
+        }
+    }
+
+    private var stopwatch: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 20, paused: !focus.stopwatchRunning)) { ctx in
+            HStack(spacing: 18) {
+                Image(systemName: "stopwatch.fill")
+                    .font(.system(size: 30, weight: .bold))
+                    .foregroundStyle(.yellow)
+                    .symbolEffect(.pulse, isActive: focus.stopwatchRunning)
+                    .frame(width: 64, height: 64)
+                Text(FocusModel.format(focus.stopwatchElapsed(at: ctx.date)))
+                    .font(.system(size: 40, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+                    .monospacedDigit()
+                Spacer()
+                circleButton(focus.stopwatchRunning ? "pause.fill" : "play.fill", focus.stopwatchRunning ? "Pause" : "Resume",
+                             .yellow.opacity(0.22), .yellow) { focus.toggleStopwatch() }
+                circleButton("arrow.counterclockwise", "Reset", .white.opacity(0.14), .white) { focus.resetStopwatch() }
             }
         }
     }

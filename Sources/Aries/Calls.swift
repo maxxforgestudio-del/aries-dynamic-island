@@ -2,6 +2,7 @@ import AppKit
 import ApplicationServices
 import Combine
 import CoreAudio
+import Darwin
 
 struct CallInfo: Equatable {
     enum Kind: Equatable { case incoming, active }
@@ -60,7 +61,101 @@ final class CallMonitor: ObservableObject {
             .sink { [weak self] clients, cam in self?.evaluate(clients: clients, camera: cam) }
             .store(in: &bag)
         micMuted = Self.inputMuted()
-        bannerTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in self?.scanBanner() }
+        bannerTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in self?.scanBanner() }
+        audioTimer = Timer.scheduledTimer(withTimeInterval: 0.35, repeats: true) { [weak self] _ in self?.pollAudio() }
+        [bannerTimer, audioTimer].forEach { if let t = $0 { RunLoop.main.add(t, forMode: .common) } }
+    }
+
+    // MARK: Ringing (instant, no permission needed)
+
+    private var audioTimer: Timer?
+    private var lastRing = Date.distantPast
+    private var ringing = false
+    private var banner: (name: String, video: Bool, facetime: Bool)?
+    private static let telephony = ["callservices", "facetime", "telephony", "avconference", "ftconversation",
+                                    "incallservice", "commcenter"]
+
+    /// The Mac's ringtone for iPhone/FaceTime calls is played by the system's call services.
+    /// Seeing them output audio (without the mic) means it's ringing right now.
+    private func pollAudio() {
+        guard Prefs.bool(Prefs.callActivity) else { return }
+        let tel = Self.audioProcesses().filter { p in Self.telephony.contains { p.ident.contains($0) } }
+        let talking = tel.contains { $0.input }
+        if !talking, tel.contains(where: { $0.output }) { lastRing = Date() }
+        ringing = !talking && Date().timeIntervalSince(lastRing) < 1.2
+
+        if talking {
+            lastSeen = Date()
+            if call?.kind != .active {
+                // Answered (or an outgoing call) — switch to the live call right away.
+                let wasIncoming = call?.kind == .incoming
+                let ft = system?.micClients.contains { $0.bundleID.lowercased().contains("facetime") } == true
+                let cam = system?.cameraActive == true
+                call = CallInfo(kind: .active, title: wasIncoming ? call!.title : (ft ? "FaceTime" : "Phone Call"),
+                                subtitle: wasIncoming ? call!.subtitle : (ft ? (cam ? "FaceTime Video" : "FaceTime Audio") : "iPhone"),
+                                symbol: call?.isVideo == true ? "video.fill" : "phone.fill",
+                                bundleID: "com.apple.FaceTime", startedAt: Date(), isVideo: call?.isVideo ?? false)
+                micMuted = Self.inputMuted()
+            }
+        } else if call?.kind == .active, let s = system {
+            evaluate(clients: s.micClients, camera: s.cameraActive)
+        }
+        updateIncoming()
+    }
+
+    private var dismissed = false
+
+    private func updateIncoming() {
+        if !ringing && banner == nil { dismissed = false }
+        let incoming = (ringing || banner != nil) && call?.kind != .active && !dismissed
+        if incoming {
+            let video = banner?.video ?? false
+            let facetime = banner?.facetime ?? false
+            let info = CallInfo(kind: .incoming, title: banner?.name ?? "Incoming Call",
+                                subtitle: video ? "FaceTime Video" : (facetime ? "FaceTime Audio" : "iPhone"),
+                                symbol: video ? "video.fill" : "phone.fill", bundleID: "com.apple.FaceTime",
+                                startedAt: call?.kind == .incoming ? call!.startedAt : Date(), isVideo: video)
+            if info != call { call = info }
+        } else if call?.kind == .incoming {
+            accept = nil; decline = nil
+            call = nil
+        }
+    }
+
+    private struct AudioProc { let ident: String; let input: Bool; let output: Bool }
+
+    private static func audioProcesses() -> [AudioProc] {
+        var addr = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyProcessObjectList,
+                                              mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+        let sys = AudioObjectID(kAudioObjectSystemObject)
+        var size: UInt32 = 0
+        guard AudioObjectGetPropertyDataSize(sys, &addr, 0, nil, &size) == noErr, size > 0 else { return [] }
+        var ids = [AudioObjectID](repeating: 0, count: Int(size) / MemoryLayout<AudioObjectID>.size)
+        guard AudioObjectGetPropertyData(sys, &addr, 0, nil, &size, &ids) == noErr else { return [] }
+        func flag(_ id: AudioObjectID, _ sel: AudioObjectPropertySelector) -> Bool {
+            var a = AudioObjectPropertyAddress(mSelector: sel, mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+            var v: UInt32 = 0
+            var s = UInt32(MemoryLayout<UInt32>.size)
+            return AudioObjectGetPropertyData(id, &a, 0, nil, &s, &v) == noErr && v != 0
+        }
+        return ids.compactMap { id in
+            let input = flag(id, kAudioProcessPropertyIsRunningInput)
+            let output = flag(id, kAudioProcessPropertyIsRunningOutput)
+            guard input || output else { return nil }
+            var a = AudioObjectPropertyAddress(mSelector: kAudioProcessPropertyBundleID,
+                                               mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+            var ref: Unmanaged<CFString>?
+            var s = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
+            var bundle = ""
+            if AudioObjectGetPropertyData(id, &a, 0, nil, &s, &ref) == noErr, let r = ref { bundle = r.takeRetainedValue() as String }
+            a.mSelector = kAudioProcessPropertyPID
+            var pid: pid_t = 0
+            s = UInt32(MemoryLayout<pid_t>.size)
+            AudioObjectGetPropertyData(id, &a, 0, nil, &s, &pid)
+            var name = [CChar](repeating: 0, count: 256)
+            proc_name(pid, &name, 256)
+            return AudioProc(ident: (bundle + " " + String(cString: name)).lowercased(), input: input, output: output)
+        }
     }
 
     func debugSet(_ c: CallInfo?) { call = c }
@@ -77,7 +172,8 @@ final class CallMonitor: ObservableObject {
             let id = (c.bundleID + " " + c.name).lowercased()
             if let k = Self.callApps.first(where: { id.contains($0.match) }) {
                 found = CallInfo(kind: .active, title: k.name == "iPhone" ? "Phone Call" : k.name,
-                                 subtitle: k.name == "iPhone" ? "iPhone" : "On a call",
+                                 subtitle: k.name == "iPhone" ? "iPhone"
+                                    : (k.name == "FaceTime" ? (camera ? "FaceTime Video" : "FaceTime Audio") : "On a call"),
                                  symbol: camera ? "video.fill" : k.symbol, bundleID: c.bundleID,
                                  startedAt: Date(), isVideo: camera)
                 break
@@ -89,9 +185,13 @@ final class CallMonitor: ObservableObject {
         }
         if var f = found {
             lastSeen = Date()
-            if let existing = call, existing.kind == .active, existing.bundleID == f.bundleID {
+            let apple = { (b: String?) in ["facetime", "callservices", "telephony", "avconference"].contains { (b ?? "").lowercased().contains($0) } }
+            if let existing = call, existing.kind == .active,
+               existing.bundleID == f.bundleID || (apple(existing.bundleID) && apple(f.bundleID)) {
+                // Same call: keep its start time and the caller's name.
                 f.startedAt = existing.startedAt
-                if existing.title == "Phone Call", f.title == "Phone Call" { f.title = existing.title }
+                if !["Phone Call", "FaceTime", "Video Call"].contains(existing.title) { f.title = existing.title }
+                if existing.subtitle != "iPhone" || f.subtitle == "On a call" { f.subtitle = f.isVideo && existing.subtitle.hasPrefix("FaceTime") ? "FaceTime Video" : existing.subtitle }
             } else if let existing = call, existing.kind == .incoming {
                 // Answered: keep the caller's name.
                 f.title = existing.title
@@ -116,7 +216,7 @@ final class CallMonitor: ObservableObject {
         if trusted != axTrusted { axTrusted = trusted }
         guard trusted, Prefs.bool(Prefs.callBanner),
               let nc = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.notificationcenterui").first
-        else { return }
+        else { if banner != nil { banner = nil; updateIncoming() }; return }
 
         let app = AXUIElementCreateApplication(nc.processIdentifier)
         var texts: [String] = []
@@ -150,15 +250,12 @@ final class CallMonitor: ObservableObject {
             let skip = ["facetime", "iphone", "incoming", "audio", "video", "call", "accept", "decline", "now"]
             let caller = texts.first { t in !skip.contains(where: { t.lowercased() == $0 || t.lowercased().hasPrefix($0 + " ") }) }
                 ?? texts.first ?? "Incoming Call"
-            let video = texts.contains { $0.lowercased().contains("video") }
-            let info = CallInfo(kind: .incoming, title: caller, subtitle: video ? "FaceTime Video" : "iPhone",
-                                symbol: video ? "video.fill" : "phone.fill", bundleID: "com.apple.FaceTime",
-                                startedAt: call?.kind == .incoming ? call!.startedAt : Date(), isVideo: video)
-            if info != call { call = info }
-        } else if call?.kind == .incoming {
-            accept = nil; decline = nil
-            call = nil
+            let all = texts.joined(separator: " ").lowercased()
+            banner = (caller, all.contains("video"), all.contains("facetime"))
+        } else {
+            banner = nil
         }
+        updateIncoming()
     }
 
     func acceptCall() {
@@ -168,8 +265,12 @@ final class CallMonitor: ObservableObject {
 
     func declineCall() {
         if let (el, action) = decline { AXUIElementPerformAction(el, action as CFString) }
+        dismissed = true
         call = nil
     }
+
+    /// Whether Accept/Decline can press the real buttons (needs Accessibility).
+    var canAnswer: Bool { axTrusted && Prefs.bool(Prefs.callBanner) }
 
     /// Tries to press the call app's own End/Leave button; otherwise brings the app forward.
     func endCall() {

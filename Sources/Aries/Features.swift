@@ -28,7 +28,7 @@ final class ShelfStore: ObservableObject {
     func airDrop(_ urls: [URL]? = nil) {
         let list = urls ?? items
         guard !list.isEmpty, let s = NSSharingService(named: .sendViaAirDrop) else { return }
-        NSApp.activate(ignoringOtherApps: true)
+        if #available(macOS 14.0, *) { NSApp.activate() } else { NSApp.activate(ignoringOtherApps: true) }
         s.perform(withItems: list)
     }
 

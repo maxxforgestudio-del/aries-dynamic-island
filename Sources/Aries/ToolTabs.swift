@@ -341,6 +341,13 @@ struct CallTab: View {
                         Text("Incoming call…")
                             .font(.system(size: 13, weight: .semibold, design: .rounded))
                             .foregroundStyle(.green)
+                        if !calls.canAnswer {
+                            Button("Allow answering from here") { PermissionCenter.shared.request(.accessibility) }
+                                .buttonStyle(.plain)
+                                .font(.system(size: 10.5, weight: .semibold, design: .rounded))
+                                .foregroundStyle(.white.opacity(0.55))
+                                .underline()
+                        }
                     }
                 }
                 Spacer()

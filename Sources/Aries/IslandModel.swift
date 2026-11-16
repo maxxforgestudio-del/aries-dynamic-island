@@ -22,12 +22,14 @@ enum CompactState: Hashable {
     case indicators
     case timer
     case call
+    case download
+    case activity
     case music
     case toast(Toast)
 }
 
 enum IslandTab: String, CaseIterable, Identifiable {
-    case call, home, music, notes, shelf, timer, clipboard, mirror
+    case call, home, music, notes, shelf, timer, tools, clipboard, mirror
     var id: String { rawValue }
     var symbol: String {
         switch self {
@@ -37,6 +39,7 @@ enum IslandTab: String, CaseIterable, Identifiable {
         case .notes: return "note.text"
         case .shelf: return "tray.full.fill"
         case .timer: return "timer"
+        case .tools: return "square.grid.2x2.fill"
         case .clipboard: return "doc.on.clipboard.fill"
         case .mirror: return "person.crop.square.fill"
         }
@@ -57,6 +60,14 @@ final class IslandModel: ObservableObject {
     let weather = WeatherModel()
     let calls = CallMonitor()
     let mirror = MirrorCamera()
+    let downloads = DownloadsMonitor()
+    let live = LiveActivityCenter()
+    let focus = FocusModel()
+    let tools = ToolsModel()
+    let focusMode = FocusMonitor()
+    private let extras = SystemExtras()
+
+    enum Secondary: Hashable { case timer, download, activity, privacy, stopwatch }
     private let audio = AudioMonitor()
 
     @Published private(set) var notchSize = CGSize(width: 185, height: 32)
@@ -75,6 +86,8 @@ final class IslandModel: ObservableObject {
     }
     /// Bumped to fire a confetti burst.
     @Published private(set) var celebration = 0
+    /// Little sideways bump when you swipe the island to skip.
+    @Published private(set) var nudge: CGFloat = 0
 
     var onLayoutChange: (() -> Void)?
 
@@ -98,6 +111,19 @@ final class IslandModel: ObservableObject {
                 .sink { [weak self] in self?.objectWillChange.send(); self?.layoutChanged() }
                 .store(in: &bag)
         }
+
+        for pub in [live.objectWillChange.eraseToAnyPublisher(), focus.objectWillChange.eraseToAnyPublisher(),
+                    tools.objectWillChange.eraseToAnyPublisher(), focusMode.objectWillChange.eraseToAnyPublisher()] {
+            pub.receive(on: RunLoop.main)
+                .sink { [weak self] in self?.objectWillChange.send(); self?.layoutChanged() }
+                .store(in: &bag)
+        }
+        downloads.objectWillChange.receive(on: RunLoop.main)
+            .sink { [weak self] in self?.objectWillChange.send(); self?.layoutChanged() }
+            .store(in: &bag)
+        music.$lyricsState.receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.objectWillChange.send(); self?.layoutChanged() }
+            .store(in: &bag)
 
         Publishers.CombineLatest(music.$isPlaying, music.$track.map { $0?.id })
             .receive(on: RunLoop.main)
@@ -142,6 +168,19 @@ final class IslandModel: ObservableObject {
 
     /// Starts the live services (not used by the snapshot renderer).
     func startServices() {
+        downloads.onFinished = { [weak self] url in self?.downloadFinished(url) }
+        downloads.setEnabled(Prefs.bool(Prefs.downloadsActivity))
+        Updater.shared.onAvailable = { [weak self] v in
+            guard let self else { return }
+            if Prefs.bool(Prefs.autoInstallUpdates) {
+                // Fully automatic: wait for a quiet moment (no call, island closed), then update.
+                self.installWhenQuiet(v)
+            } else {
+                self.show(Toast(icon: "arrow.down.app.fill", tint: .blue, title: "Aries \(v) is here", detail: "Update",
+                                detailIcon: "arrow.right.circle.fill"), for: 6)
+            }
+        }
+        Updater.shared.startAutomaticChecks()
         calendar.start()
         clipboard.start()
         weather.start()
@@ -157,6 +196,22 @@ final class IslandModel: ObservableObject {
                              detailIcon: "checkmark.circle.fill"), for: 3)
         }
         audio.start()
+        focusMode.onChange = { [weak self] old, new in
+            guard let self, Prefs.bool(Prefs.focusToasts) else { return }
+            if let m = new {
+                self.show(Toast(icon: m.symbol, tint: m.color, title: m.name, detail: "On", detailIcon: "circle.fill"), for: 2.6)
+            } else if let m = old {
+                self.show(Toast(icon: m.symbol, tint: .white.opacity(0.7), title: m.name, detail: "Off"), for: 2)
+            }
+        }
+        focusMode.start()
+        extras.onToast = { [weak self] t, secs in
+            guard let self, !self.isExpanded else { return }
+            self.show(t, for: secs)
+        }
+        extras.start()
+        DesktopWidgets.shared.refresh(model: self)
+        LockScreenWidgets.shared.start(model: self)
         DistributedNotificationCenter.default().addObserver(
             forName: Notification.Name("com.apple.screenIsUnlocked"), object: nil, queue: .main
         ) { [weak self] _ in
@@ -197,6 +252,8 @@ final class IslandModel: ObservableObject {
     var compact: CompactState {
         if let t = toast { return .toast(t) }
         if calls.call?.kind == .active { return .call }
+        if downloads.current != nil && Prefs.bool(Prefs.downloadsActivity) && !(musicVisible && music.track != nil) { return .download }
+        if live.current != nil && !(musicVisible && music.track != nil) { return .activity }
         if musicVisible && music.track != nil { return .music }
         if timer.isActive { return .timer }
         if hasIndicators { return .indicators }
@@ -210,6 +267,7 @@ final class IslandModel: ObservableObject {
         if Prefs.bool(Prefs.showNotesTab) { t.append(.notes) }
         if Prefs.bool(Prefs.showShelf) { t.append(.shelf) }
         if Prefs.bool(Prefs.showTimer) { t.append(.timer) }
+        if Prefs.bool(Prefs.showTools) { t.append(.tools) }
         if Prefs.bool(Prefs.showClipboard) { t.append(.clipboard) }
         if Prefs.bool(Prefs.showMirror) { t.append(.mirror) }
         return t
@@ -230,18 +288,25 @@ final class IslandModel: ObservableObject {
             case .notes: h = 214
             case .shelf: h = 110
             case .timer: h = timer.isActive ? 98 : 116
+            case .tools: h = 166
             case .clipboard: h = 214
             case .mirror: h = 196
             case .call: h = 92
             }
-            return CGSize(width: max(W + 410, 600), height: H + h)
+            return CGSize(width: max(W + 410, 600) * A11y.scale, height: (H + h) * A11y.scale)
         }
         switch compact {
         case .idle: return CGSize(width: W, height: H)
         case .indicators: return CGSize(width: W + 2 * 34, height: H)
         case .timer: return CGSize(width: W + 2 * 46, height: H)
         case .call: return CGSize(width: W + 2 * 52, height: H)
-        case .music: return CGSize(width: W + 2 * (timer.isActive ? 58 : 44), height: H)
+        case .music:
+            let w = W + 2 * (timer.isActive ? 58 : 44)
+            return showsLyricStrip ? CGSize(width: max(w, W + 190), height: H + 26) : CGSize(width: w, height: H)
+        case .download: return CGSize(width: W + 2 * 60, height: H)
+        case .activity:
+            let chars = CGFloat(max((live.current?.title.count ?? 0), (live.current?.subtitle.count ?? 0)))
+            return CGSize(width: W + 2 * min(170, max(80, 40 + chars * 7.2)), height: H)
         case .toast(let t):
             let chars = CGFloat(max(t.title.count, t.detail.count + (t.detailIcon == nil ? 0 : 3)))
             let wing = min(185, max(104, 50 + chars * 7.4))
@@ -251,7 +316,46 @@ final class IslandModel: ObservableObject {
 
     var totalSize: CGSize { CGSize(width: bodySize.width + ear * 2, height: bodySize.height) }
 
-    var layoutKey: String { "\(isExpanded)-\(compact)-\(tab)-\(musicPanel)-\(music.track != nil)-\(timer.isActive)" }
+    var layoutKey: String {
+        "\(isExpanded)-\(compact)-\(tab)-\(musicPanel)-\(music.track != nil)-\(timer.isActive)-\(showsLyricStrip)-\(String(describing: secondary))"
+    }
+
+    /// The slim live-lyrics line under the notch while a song with synced lyrics plays.
+    var showsLyricStrip: Bool {
+        Prefs.bool(Prefs.liveLyrics) && music.isPlaying && music.lyrics?.synced == true
+    }
+
+    // MARK: Gestures
+
+    /// Swipe left/right = next/previous. Scroll up/down on the closed island = volume.
+    func swipe(next: Bool) {
+        guard music.track != nil else { return }
+        next ? music.next() : music.previous()
+        if Prefs.bool(Prefs.haptics) {
+            NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+        }
+        guard !A11y.reduceMotion else { return }
+        withAnimation(.spring(response: 0.18, dampingFraction: 0.5)) { nudge = next ? -14 : 14 }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.16) { [weak self] in
+            withAnimation(.spring(response: 0.45, dampingFraction: 0.55)) { self?.nudge = 0 }
+        }
+    }
+
+    func scrollVolume(by delta: Int) {
+        guard music.track != nil else { return }
+        let v = max(0, min(100, music.volume + delta))
+        guard v != music.volume else { return }
+        music.setVolume(v)
+        showLevel(icon: AudioMonitor.volumeSymbol(Float(v) / 100, muted: v == 0),
+                  title: music.source == .appleMusic ? "Music" : "Spotify", level: Double(v) / 100)
+    }
+
+    private func downloadFinished(_ url: URL) {
+        if Prefs.bool(Prefs.downloadsToShelf) { shelf.add([url]) }
+        show(Toast(icon: "arrow.down.circle.fill", tint: .green, title: url.lastPathComponent,
+                   detail: Prefs.bool(Prefs.downloadsToShelf) ? "On your Shelf" : "Downloaded",
+                   detailIcon: "checkmark.circle.fill"), for: 3.5)
+    }
 
     private func layoutChanged() {
         DispatchQueue.main.async { self.onLayoutChange?() }
@@ -262,7 +366,7 @@ final class IslandModel: ObservableObject {
     func setHovering(_ inside: Bool) {
         guard inside != hovering else { return }
         hovering = inside
-        if Prefs.bool(Prefs.hoverBounce) {
+        if Prefs.bool(Prefs.hoverBounce) && !A11y.reduceMotion {
             withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) { isHovering = inside }
         }
         if inside {
@@ -281,6 +385,14 @@ final class IslandModel: ObservableObject {
     }
 
     func tap() {
+        if let t = toast, t.icon == "hand.raised.fill" {
+            AppDelegate.shared.openSettings(pane: "permissions")
+            return
+        }
+        if let t = toast, t.icon == "arrow.down.app.fill" {
+            AppDelegate.shared.openSettings(pane: "updates")
+            return
+        }
         if !isExpanded { expand() }
     }
 
@@ -398,6 +510,7 @@ final class IslandModel: ObservableObject {
 
     func show(_ t: Toast, for seconds: Double = 2.6) {
         toastWork?.cancel()
+        A11y.announce([t.title, t.detail].filter { !$0.isEmpty }.joined(separator: ", "))
         withAnimation(.spring(response: 0.45, dampingFraction: 0.68)) { toast = t }
         layoutChanged()
         scheduleToastEnd(after: seconds)
@@ -429,8 +542,121 @@ final class IslandModel: ObservableObject {
 
     func celebrate() { celebration += 1 }
 
+    // MARK: Second activity (split-off bubble)
+
+    /// When something else is running alongside the main activity, it splits into a bubble.
+    var secondary: Secondary? {
+        guard !isExpanded, toast == nil else { return nil }
+        switch compact {
+        case .music, .call, .download, .activity, .timer:
+            if compact != .timer, timer.isActive { return .timer }
+            if compact != .download, downloads.current != nil, Prefs.bool(Prefs.downloadsActivity) { return .download }
+            if compact != .activity, live.current != nil { return .activity }
+            if focus.stopwatchRunning { return .stopwatch }
+            if hasIndicators, compact != .call { return .privacy }
+            return nil
+        default:
+            // A stopwatch running on its own gets its bubble beside the notch.
+            return focus.stopwatchRunning ? .stopwatch : nil
+        }
+    }
+
+    func openSecondary(_ s: Secondary) {
+        switch s {
+        case .timer, .stopwatch: expand(to: .timer)
+        case .download: expand(to: .shelf)
+        case .activity, .privacy: expand(to: .home)
+        }
+    }
+
+    // MARK: aries:// links (Live Activities for Shortcuts, scripts and other apps)
+
+    func handle(url: URL) {
+        guard url.scheme == "aries" else { return }
+        let q = Dictionary((URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? [])
+            .map { ($0.name, $0.value ?? "") }, uniquingKeysWith: { $1 })
+        let action = ([url.host ?? ""] + url.pathComponents.filter { $0 != "/" }).joined(separator: "/")
+        switch action {
+        case "activity", "activity/start", "activity/update":
+            let id = q["id"] ?? q["title"] ?? UUID().uuidString
+            live.upsert(LiveActivity(id: id, title: q["title"] ?? "Live Activity", subtitle: q["subtitle"] ?? "",
+                                     icon: q["icon"] ?? "sparkles", color: LiveActivityCenter.color(q["color"]),
+                                     progress: q["progress"].flatMap(Double.init).map { min(1, max(0, $0)) }))
+        case "activity/end":
+            if let id = q["id"] { live.end(id) } else { live.endAll() }
+        case "toast":
+            show(Toast(icon: q["icon"] ?? "bell.fill", tint: LiveActivityCenter.color(q["color"] ?? "white"),
+                       title: q["title"] ?? "Aries", detail: q["subtitle"] ?? ""), for: Double(q["seconds"] ?? "") ?? 3)
+        case "timer":
+            timer.start(minutes: Double(q["minutes"] ?? "") ?? 5)
+        case "focus":
+            focus.startFocus(timer)
+        case "stopwatch":
+            focus.toggleStopwatch()
+        case "awake":
+            tools.keepAwake(minutes: q["minutes"].flatMap(Double.init))
+            confirm("cup.and.saucer.fill", "Mac stays awake")
+        case "awake/off":
+            tools.stopAwake()
+        case "note":
+            if let t = q["text"], !t.isEmpty { notes.add(t); confirm("note.text", "Note saved") } else { newNote() }
+        case "open":
+            expand(to: IslandTab(rawValue: q["tab"] ?? "") ?? .home)
+        case "close":
+            collapse()
+        case "settings":
+            AppDelegate.shared.openSettings(pane: q["pane"] ?? "general")
+        case "whatsnew":
+            AppDelegate.shared.openWhatsNew()
+        case "welcome":
+            AppDelegate.shared.openWelcome()
+        case "update-experience":
+            AppDelegate.shared.openUpdateExperience()
+        case "windows/close":
+            AppDelegate.shared.closeAuxWindows()
+        case "style":
+            // aries://style?name=aquatic | crystal | classic
+            if let n = q["name"] { withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) { UserDefaults.standard.set(n, forKey: Prefs.islandStyle) } }
+        case "lyrics":
+            // aries://lyrics?style=vinyl&side=none (style: lyrics | vinyl | karaoke; side: lyrics | queue | artist | album | none)
+            if let st = q["style"], let style = LyricsStyle(rawValue: st) { LyricsPrefs.style = style }
+            if let sd = q["side"], PlayerSide(rawValue: sd) != nil {
+                withAnimation(.spring(response: 0.6, dampingFraction: 0.85)) { UserDefaults.standard.set(sd, forKey: "playerSide") }
+            }
+            AppDelegate.shared.openLyrics()
+        case "lyrics/close":
+            AppDelegate.shared.closeLyrics()
+        case "play", "pause", "playpause":
+            music.playPause()
+        case "next": music.next()
+        case "previous": music.previous()
+        default:
+            expand()
+        }
+        layoutChanged()
+    }
+
+    private func installWhenQuiet(_ v: String) {
+        // No downloadable build attached to the release: just let the user know, never open a browser on its own.
+        guard Updater.shared.canInstallInPlace else {
+            show(Toast(icon: "arrow.down.app.fill", tint: .blue, title: "Aries \(v) is here", detail: "Update",
+                       detailIcon: "arrow.right.circle.fill"), for: 6)
+            return
+        }
+        guard calls.call == nil, !isExpanded, !isEditing else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 60) { [weak self] in self?.installWhenQuiet(v) }
+            return
+        }
+        show(Toast(icon: "sparkles", tint: .cyan, title: "Updating to Aries \(v)", detail: "One moment"), for: 4)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { Updater.shared.install() }
+    }
+
     private func timerFinished() {
         if Prefs.bool(Prefs.timerSound) { NSSound(named: "Glass")?.play() }
+        if let (icon, text) = focus.timerEnded(timer) {
+            show(Toast(icon: icon, tint: .orange, title: text, detail: focus.phase == .rest ? "\(Int(focus.breakMinutes)) min" : "\(Int(focus.focusMinutes)) min"), for: 4)
+            return
+        }
         if Prefs.bool(Prefs.timerPausesMusic), music.isPlaying { music.playPause() }
         celebrate()
         show(Toast(icon: "bell.fill", tint: .orange, title: "Time's up!", detail: "Timer done",

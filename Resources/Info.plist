@@ -7,8 +7,8 @@
     <key>CFBundleIdentifier</key><string>app.aries.dynamicisland</string>
     <key>CFBundleExecutable</key><string>Aries</string>
     <key>CFBundlePackageType</key><string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>1.0.0</string>
-    <key>CFBundleVersion</key><string>1</string>
+    <key>CFBundleShortVersionString</key><string>2.0.0</string>
+    <key>CFBundleVersion</key><string>3</string>
     <key>CFBundleIconFile</key><string>AppIcon</string>
     <key>LSMinimumSystemVersion</key><string>14.0</string>
     <key>LSUIElement</key><true/>
@@ -21,7 +21,18 @@
     <string>Aries shows your next event in the island and gives you a heads-up before meetings.</string>
     <key>NSCameraUsageDescription</key>
     <string>Aries uses the camera only for the Mirror tab, so you can check how you look before a call.</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Aries listens only while Karaoke "Sing Along" is on, to score how much you sing. Nothing is recorded or sent anywhere.</string>
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key><string>Aries Live Activities</string>
+            <key>CFBundleURLSchemes</key><array><string>aries</string></array>
+        </dict>
+    </array>
+    <key>AriesCodename</key>
+    <string>Aquatic</string>
     <key>NSHumanReadableCopyright</key>
-    <string>MIT License</string>
+    <string>© 2026 Maxx Forge Studio. All rights reserved.</string>
 </dict>
 </plist>

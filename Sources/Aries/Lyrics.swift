@@ -1,9 +1,16 @@
 import Foundation
 
+struct LyricWord: Equatable {
+    let time: Double
+    let text: String
+}
+
 struct LyricLine: Identifiable, Equatable {
     let id: Int
     let time: Double
     let text: String
+    /// Per-word timing from "enhanced" LRC (<mm:ss.xx>word), when the lyrics have it.
+    var words: [LyricWord]? = nil
     var isInterlude: Bool { text.trimmingCharacters(in: .whitespaces).isEmpty }
 }
 
@@ -109,24 +116,42 @@ enum LyricsService {
 
     static func parseLRC(_ s: String) -> [LyricLine] {
         let tag = try! NSRegularExpression(pattern: #"\[(\d+):(\d+(?:[\.:]\d+)?)\]"#)
-        var out: [(Double, String)] = []
+        let wordTag = try! NSRegularExpression(pattern: #"<(\d+):(\d+(?:\.\d+)?)>"#)
+        var out: [(Double, String, [LyricWord]?)] = []
         for raw in s.components(separatedBy: .newlines) {
             let ns = raw as NSString
             let matches = tag.matches(in: raw, range: NSRange(location: 0, length: ns.length))
             guard let last = matches.last else { continue }
-            let text = ns.substring(from: last.range.location + last.range.length).trimmingCharacters(in: .whitespaces)
+            let raw = ns.substring(from: last.range.location + last.range.length)
+            // Enhanced LRC: split "<00:12.30>Hello <00:12.90>world" into timed words.
+            var words: [LyricWord]?
+            let rawNS = raw as NSString
+            let wm = wordTag.matches(in: raw, range: NSRange(location: 0, length: rawNS.length))
+            if !wm.isEmpty {
+                var list: [LyricWord] = []
+                for (i, m) in wm.enumerated() {
+                    let t = (Double(rawNS.substring(with: m.range(at: 1))) ?? 0) * 60 + (Double(rawNS.substring(with: m.range(at: 2))) ?? 0)
+                    let start = m.range.location + m.range.length
+                    let end = i + 1 < wm.count ? wm[i + 1].range.location : rawNS.length
+                    let w = rawNS.substring(with: NSRange(location: start, length: end - start)).trimmingCharacters(in: .whitespaces)
+                    if !w.isEmpty { list.append(LyricWord(time: t, text: w)) }
+                }
+                words = list.isEmpty ? nil : list
+            }
+            let text = wordTag.stringByReplacingMatches(in: raw, range: NSRange(location: 0, length: rawNS.length), withTemplate: "")
+                .replacingOccurrences(of: "  ", with: " ").trimmingCharacters(in: .whitespaces)
             for m in matches {
                 let min = Double(ns.substring(with: m.range(at: 1))) ?? 0
                 let sec = Double(ns.substring(with: m.range(at: 2)).replacingOccurrences(of: ":", with: ".")) ?? 0
-                out.append((min * 60 + sec, text))
+                out.append((min * 60 + sec, text, words))
             }
         }
         out.sort { $0.0 < $1.0 }
         // Collapse consecutive empty lines.
         var lines: [LyricLine] = []
-        for (t, text) in out {
+        for (t, text, words) in out {
             if text.isEmpty, lines.last?.isInterlude == true { continue }
-            lines.append(LyricLine(id: lines.count, time: t, text: text))
+            lines.append(LyricLine(id: lines.count, time: t, text: text, words: words))
         }
         while lines.last?.isInterlude == true { lines.removeLast() }
         return lines

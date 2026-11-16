@@ -1,21 +1,32 @@
-MIT License
+Aries Dynamic Island
+Copyright (c) 2026 Maxx Forge Studio. All rights reserved.
 
-Copyright (c) 2026 Maximus
+This software, including its source code, design, artwork, names and logos
+("Aries", "Aries Dynamic Island", and the Maxx Forge Studio name and logo), is the
+proprietary property of Maxx Forge Studio.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+PERMITTED USE
+You may download the official compiled release of Aries Dynamic Island from
+Maxx Forge Studio's official channels and use it, free of charge, on Macs you own
+or control.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+NOT PERMITTED without prior written permission from Maxx Forge Studio:
+  - copying, modifying, translating or creating derivative works of the source
+    code or any part of the software;
+  - redistributing, selling, sublicensing, renting or publishing the software,
+    its source code, or modified versions of it;
+  - reverse engineering, decompiling or disassembling the software, except where
+    applicable law expressly permits it;
+  - removing or altering any copyright, trademark or ownership notices;
+  - using the Maxx Forge Studio or Aries names or logos for any other product.
+
+Viewing this source code does not grant any license to use it.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+IMPLIED. IN NO EVENT SHALL MAXX FORGE STUDIO BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR ITS USE.
+
+Versions of this software published before November 2026 (v1.0.0) were released
+under the MIT License; that grant applies only to those earlier versions.
+
+Contact: Maxx Forge Studio — https://github.com/maxxforgestudio-del

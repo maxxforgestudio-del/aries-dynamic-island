@@ -1,32 +1,65 @@
 import AppKit
 
-// Draws Aries Dynamic Island's app icon: a glossy gradient squircle with a black island and a music note.
+// Builds the Aries app icon from the brand logo (Resources/Branding/AriesLogo.png):
+// the chrome "A" mark on a deep black macOS squircle with a soft rim light.
+let logoPath = CommandLine.arguments.count > 2 ? CommandLine.arguments[2] : "Resources/Branding/AriesLogo.png"
+guard let logo = NSImage(contentsOfFile: logoPath),
+      let cg = logo.cgImage(forProposedRect: nil, context: nil, hints: nil) else { fatalError("logo not found") }
+
+// The "A" + orbit area of the 1254×1254 artwork (top-left origin).
+let scaleK = CGFloat(cg.width) / 1254
+let markRect = CGRect(x: 185 * scaleK, y: 225 * scaleK, width: 900 * scaleK, height: 580 * scaleK)
+let rawMark = cg.cropping(to: markRect)!
+
+// Feather the crop's edges so the artwork's black background melts into the tile.
+let mark: NSImage = {
+    let size = NSSize(width: rawMark.width, height: rawMark.height)
+    let img = NSImage(size: size)
+    img.lockFocus()
+    NSImage(cgImage: rawMark, size: size).draw(in: NSRect(origin: .zero, size: size))
+    NSGraphicsContext.current?.compositingOperation = .destinationIn
+    NSGradient(colorsAndLocations: (NSColor.white, 0.0), (NSColor.white, 0.72), (NSColor.white.withAlphaComponent(0), 1.0))!
+        .draw(in: NSRect(x: -size.width * 0.08, y: -size.height * 0.12, width: size.width * 1.16, height: size.height * 1.24),
+              relativeCenterPosition: .zero)
+    img.unlockFocus()
+    return img
+}()
+
 func render(_ px: Int) -> Data {
     let s = CGFloat(px)
     let img = NSImage(size: NSSize(width: s, height: s))
     img.lockFocus()
-    let inset = s * 0.1
+    let inset = s * 0.098
     let rect = NSRect(x: inset, y: inset, width: s - inset * 2, height: s - inset * 2)
     let squircle = NSBezierPath(roundedRect: rect, xRadius: rect.width * 0.225, yRadius: rect.width * 0.225)
-    NSGradient(colors: [NSColor(srgbRed: 0.98, green: 0.36, blue: 0.55, alpha: 1),
-                        NSColor(srgbRed: 0.55, green: 0.32, blue: 0.98, alpha: 1),
-                        NSColor(srgbRed: 0.16, green: 0.62, blue: 0.98, alpha: 1)])!
-        .draw(in: squircle, angle: -60)
-    let iw = rect.width * 0.62, ih = rect.width * 0.2
-    let island = NSRect(x: rect.midX - iw / 2, y: rect.maxY - rect.height * 0.2 - ih, width: iw, height: ih)
+
+    NSGraphicsContext.current?.saveGraphicsState()
+    let shadow = NSShadow()
+    shadow.shadowColor = NSColor.black.withAlphaComponent(0.45)
+    shadow.shadowBlurRadius = s * 0.02
+    shadow.shadowOffset = NSSize(width: 0, height: -s * 0.008)
+    shadow.set()
     NSColor.black.setFill()
-    NSBezierPath(roundedRect: island, xRadius: ih / 2, yRadius: ih / 2).fill()
-    let dot = ih * 0.36
-    NSColor(srgbRed: 0.3, green: 0.95, blue: 0.5, alpha: 1).setFill()
-    NSBezierPath(ovalIn: NSRect(x: island.maxX - ih * 0.5 - dot / 2, y: island.midY - dot / 2, width: dot, height: dot)).fill()
-    let cfg = NSImage.SymbolConfiguration(pointSize: rect.width * 0.36, weight: .bold)
-    if let note = NSImage(systemSymbolName: "music.note", accessibilityDescription: nil)?.withSymbolConfiguration(cfg) {
-        let tinted = NSImage(size: note.size, flipped: false) { r in
-            note.draw(in: r); NSColor.white.set(); r.fill(using: .sourceAtop); return true
-        }
-        let ns = tinted.size
-        tinted.draw(in: NSRect(x: rect.midX - ns.width / 2, y: rect.minY + rect.height * 0.16, width: ns.width, height: ns.height))
-    }
+    squircle.fill()
+    NSGraphicsContext.current?.restoreGraphicsState()
+
+    NSGraphicsContext.current?.saveGraphicsState()
+    squircle.addClip()
+    NSGradient(colors: [NSColor(white: 0.13, alpha: 1), NSColor(white: 0.02, alpha: 1)])!.draw(in: rect, angle: -90)
+    // soft top glow
+    NSGradient(colors: [NSColor(white: 1, alpha: 0.10), NSColor(white: 1, alpha: 0)])!
+        .draw(fromCenter: NSPoint(x: rect.midX, y: rect.maxY), radius: 0,
+              toCenter: NSPoint(x: rect.midX, y: rect.maxY), radius: rect.width * 0.7, options: [])
+    let w = rect.width * 0.86
+    let h = w * mark.size.height / mark.size.width
+    mark.draw(in: NSRect(x: rect.midX - w / 2, y: rect.midY - h / 2 + rect.height * 0.02, width: w, height: h),
+              from: .zero, operation: .screen, fraction: 1)
+    NSGraphicsContext.current?.restoreGraphicsState()
+
+    // rim light
+    NSColor(white: 1, alpha: 0.16).setStroke()
+    squircle.lineWidth = max(1, s * 0.004)
+    squircle.stroke()
     img.unlockFocus()
     let rep = NSBitmapImageRep(data: img.tiffRepresentation!)!
     return rep.representation(using: .png, properties: [:])!

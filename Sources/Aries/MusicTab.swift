@@ -35,6 +35,7 @@ private struct PlayerView: View {
         VStack(spacing: 0) {
             HStack(alignment: .center, spacing: 14) {
                 ArtworkView(image: music.artwork, size: 72, radius: 15, accent: music.accent)
+                    .islandMatched("art")
                     .shadow(color: music.accent.opacity(0.4), radius: 12, y: 4)
                     .scaleEffect(music.isPlaying ? 1 : 0.9)
                     .rotationEffect(.degrees(music.isPlaying ? 0 : -3))
@@ -83,9 +84,17 @@ private struct PlayerView: View {
             .padding(.horizontal, 22)
             .padding(.top, 6)
 
-            ScrubberView(music: music, tint: .white)
-                .padding(.horizontal, 22)
-                .padding(.top, 8)
+            if music.duration > 0 {
+                ScrubberView(music: music, tint: .white)
+                    .padding(.horizontal, 22)
+                    .padding(.top, 8)
+            } else {
+                Text("Playing in your browser")
+                    .font(.system(size: 10.5, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.4))
+                    .frame(height: 16)
+                    .padding(.top, 8)
+            }
 
             HStack(spacing: 22) {
                 small(music.shuffle ? "shuffle" : "shuffle", active: music.shuffle, help: "Shuffle") { music.toggleShuffle() }

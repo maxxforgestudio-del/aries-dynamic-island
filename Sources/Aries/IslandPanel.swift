@@ -59,6 +59,11 @@ final class IslandPanelController {
         monitors.append(NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged, .mouseExited, .leftMouseUp]) { [weak self] e in
             self?.updateMouse(); return e
         } as Any)
+        // Two-finger swipe on the island = next/previous song; scroll on the closed island = volume.
+        monitors.append(NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] e in
+            guard let self, e.window === self.panel else { return e }
+            return self.handleScroll(e) ? nil : e
+        } as Any)
         // Click anywhere else closes the island (like iPhone).
         monitors.append(NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
             guard let self, self.model.isExpanded, !self.isInside(NSEvent.mouseLocation, margin: 14) else { return }
@@ -87,6 +92,39 @@ final class IslandPanelController {
         panel.setFrame(NSRect(x: screenFrame.midX - size.width / 2,
                               y: screenFrame.maxY - size.height,
                               width: size.width, height: size.height), display: true)
+    }
+
+    private var swipeX: CGFloat = 0
+    private var swipeY: CGFloat = 0
+    private var swipeFired = false
+
+    /// Returns true when the scroll was used as a gesture.
+    private func handleScroll(_ e: NSEvent) -> Bool {
+        guard Prefs.bool(Prefs.gestures), model.music.track != nil else { return false }
+        let expandedMusic = model.isExpanded && model.tab == .music && model.musicPanel == .player
+        guard !model.isExpanded || expandedMusic else { return false }
+
+        if e.phase == .began || (e.phase.isEmpty && e.momentumPhase.isEmpty && !e.hasPreciseScrollingDeltas) {
+            swipeX = 0; swipeY = 0; swipeFired = false
+        }
+        guard e.momentumPhase.isEmpty else { return true }
+        let k: CGFloat = e.hasPreciseScrollingDeltas ? 1 : 8
+        swipeX += e.scrollingDeltaX * k
+        swipeY += e.scrollingDeltaY * k
+
+        if !swipeFired, abs(swipeX) > 70, abs(swipeX) > abs(swipeY) * 1.6 {
+            swipeFired = true
+            model.swipe(next: swipeX < 0)
+            return true
+        }
+        if !model.isExpanded, abs(swipeY) > abs(swipeX) * 1.4, abs(swipeY) > 12 {
+            let step = Int((swipeY / 12).rounded(.towardZero))
+            swipeY -= CGFloat(step) * 12
+            model.scrollVolume(by: step * 3)
+            return true
+        }
+        if e.phase == .ended || e.phase == .cancelled { swipeX = 0; swipeY = 0 }
+        return swipeFired
     }
 
     func focus() {
@@ -134,7 +172,12 @@ final class IslandPanelController {
                           y: screenFrame.maxY - size.height - margin,
                           width: size.width + margin * 2,
                           height: size.height + margin + 2)
-        let inside = rect.contains(p)
+        var inside = rect.contains(p)
+        if model.secondary != nil {
+            let d = model.notchSize.height
+            let bubble = NSRect(x: screenFrame.midX + size.width / 2 + 4, y: screenFrame.maxY - d - 3, width: d + 10, height: d + 4)
+            inside = inside || bubble.contains(p)
+        }
         if panel.ignoresMouseEvents == inside { panel.ignoresMouseEvents = !inside }
         model.setHovering(inside)
     }

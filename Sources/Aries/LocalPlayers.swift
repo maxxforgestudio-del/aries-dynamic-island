@@ -4,6 +4,7 @@ enum MusicSource: String {
     case spotify          // Spotify app on this Mac
     case appleMusic       // Music app on this Mac
     case spotifyRemote    // Spotify on another device (your iPhone) via Spotify Connect
+    case web              // a music site in a browser tab (beta)
 }
 
 enum RepeatMode: String { case off, all, one }
@@ -97,7 +98,10 @@ enum LocalPlayers {
     """
 
     static func spotify() -> Snapshot? {
-        guard isRunning(spotifyID), let d = run(spotifyScript), d.numberOfItems >= 8 else { return nil }
+        guard isRunning(spotifyID) else { return nil }
+        let t0 = Date()
+        guard let d = run(spotifyScript), d.numberOfItems >= 8 else { return nil }
+        let sampled = t0.addingTimeInterval(Date().timeIntervalSince(t0) / 2)
         let title = d.atIndex(2)?.stringValue ?? ""
         guard !title.isEmpty else { return nil }
         let artist = d.atIndex(3)?.stringValue ?? ""
@@ -108,7 +112,7 @@ enum LocalPlayers {
             duration: num(d.atIndex(5)) / 1000.0,
             artworkURL: d.atIndex(7)?.stringValue.flatMap(URL.init(string:)))
         var snap = Snapshot(track: track, isPlaying: d.atIndex(1)?.stringValue == "playing",
-                            position: num(d.atIndex(6)), source: .spotify)
+                            position: num(d.atIndex(6)), source: .spotify, fetchedAt: sampled)
         if d.numberOfItems >= 11 {
             snap.shuffle = bool(d.atIndex(9))
             snap.repeatMode = bool(d.atIndex(10)) == true ? .all : .off
@@ -155,7 +159,10 @@ enum LocalPlayers {
     """
 
     static func music() -> Snapshot? {
-        guard isRunning(musicID), let d = run(musicScript), d.numberOfItems >= 7 else { return nil }
+        guard isRunning(musicID) else { return nil }
+        let t0 = Date()
+        guard let d = run(musicScript), d.numberOfItems >= 7 else { return nil }
+        let sampled = t0.addingTimeInterval(Date().timeIntervalSince(t0) / 2)
         let title = d.atIndex(2)?.stringValue ?? ""
         guard !title.isEmpty else { return nil }
         let artist = d.atIndex(3)?.stringValue ?? ""
@@ -165,7 +172,7 @@ enum LocalPlayers {
             album: d.atIndex(4)?.stringValue ?? "",
             duration: num(d.atIndex(5)), artworkURL: nil)
         var snap = Snapshot(track: track, isPlaying: d.atIndex(1)?.stringValue == "playing",
-                            position: num(d.atIndex(6)), source: .appleMusic)
+                            position: num(d.atIndex(6)), source: .appleMusic, fetchedAt: sampled)
         if d.numberOfItems >= 11 {
             snap.shuffle = bool(d.atIndex(8))
             switch d.atIndex(9)?.stringValue?.lowercased() {
@@ -216,6 +223,13 @@ enum LocalPlayers {
     }
 
     /// Plays a Spotify URI in the Spotify app on this Mac (no Premium/API needed).
+    static func playSpotifyURI(_ uri: String, context: String) {
+        queue.async {
+            guard isRunning(spotifyID) else { return }
+            run("tell application \"Spotify\" to play track \"\(uri)\" in context \"\(context)\"")
+        }
+    }
+
     static func playSpotifyURI(_ uri: String) {
         queue.async {
             if !isRunning(spotifyID) {

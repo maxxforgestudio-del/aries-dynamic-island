@@ -5,6 +5,7 @@ import ServiceManagement
 
 final class WelcomeWindowController: NSObject, NSWindowDelegate {
     private let window: NSWindow
+    func closeWindow() { window.orderOut(nil) }
     private let onFinish: () -> Void
 
     init(app: AppDelegate, onFinish: @escaping () -> Void) {
@@ -24,10 +25,7 @@ final class WelcomeWindowController: NSObject, NSWindowDelegate {
         window.center()
     }
 
-    func show() {
-        NSApp.activate(ignoringOtherApps: true)
-        window.makeKeyAndOrderFront(nil)
-    }
+    func show() { window.presentInFront() }
 
     func windowWillClose(_ notification: Notification) { onFinish() }
 }
@@ -83,7 +81,7 @@ struct WelcomeLettering: View {
     @ViewState private var filled = false
     @ViewState private var shine: CGFloat = -0.3
 
-    private let shape = LetteringShape("Welcome to Aries")
+    private var shape: LetteringShape { LetteringShape(text) }
     private let gradient = LinearGradient(colors: [Color(red: 1, green: 0.62, blue: 0.75), .white,
                                                    Color(red: 0.75, green: 0.7, blue: 1), Color(red: 0.6, green: 0.85, blue: 1)],
                                           startPoint: .leading, endPoint: .trailing)
@@ -126,7 +124,7 @@ struct GlowBackground: View {
     var colors: [Color] = [Color(red: 0.98, green: 0.36, blue: 0.55), Color(red: 0.55, green: 0.32, blue: 0.98),
                            Color(red: 0.16, green: 0.62, blue: 0.98), Color(red: 1, green: 0.6, blue: 0.3)]
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30)) { tl in
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: A11y.reduceMotion)) { tl in
             let t = tl.date.timeIntervalSinceReferenceDate
             GeometryReader { g in
                 ZStack {
@@ -167,6 +165,11 @@ struct WelcomeFlow: View {
     var body: some View {
         ZStack {
             GlowBackground()
+            if step == .hello {
+                BrandIntroPlayer { helloDone = true }
+                    .ignoresSafeArea()
+                    .transition(.opacity)
+            }
             VStack(spacing: 0) {
                 ZStack {
                     switch step {
@@ -193,15 +196,13 @@ struct WelcomeFlow: View {
                     removal: .move(edge: .leading).combined(with: .opacity))
     }
 
+    /// The brand intro plays full-bleed, then "Get Started" rises in above the sign-off.
     private var hello: some View {
-        VStack(spacing: 36) {
-            WelcomeLettering { withAnimation(.easeOut(duration: 0.6)) { helloDone = true } }
-                .frame(maxWidth: 720, maxHeight: 200)
+        VStack(spacing: 16) {
+            Spacer()
             Text("Your notch, alive.")
-                .font(.system(size: 20, weight: .medium, design: .rounded))
+                .font(.system(size: 19, weight: .medium, design: .rounded))
                 .foregroundStyle(.white.opacity(0.75))
-                .opacity(helloDone ? 1 : 0)
-                .offset(y: helloDone ? 0 : 10)
             Button { go(.features) } label: {
                 Text("Get Started")
                     .font(.system(size: 16, weight: .semibold, design: .rounded))
@@ -211,9 +212,11 @@ struct WelcomeFlow: View {
             }
             .buttonStyle(PressableStyle(hoverFill: .clear))
             .keyboardShortcut(.defaultAction)
-            .opacity(helloDone ? 1 : 0)
-            .scaleEffect(helloDone ? 1 : 0.8)
         }
+        .padding(.bottom, 56)
+        .opacity(helloDone ? 1 : 0)
+        .offset(y: helloDone ? 0 : 16)
+        .animation(.spring(response: 0.7, dampingFraction: 0.8), value: helloDone)
     }
 
     private var footer: some View {

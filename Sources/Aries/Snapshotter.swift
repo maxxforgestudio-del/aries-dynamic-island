@@ -39,7 +39,27 @@ enum Snapshotter {
                 }, size: canvas, to: "\(out)/\(name).png")
             }
 
+            model.collapse(); await pause(3.2)   // let the song announcement finish
             island("01-compact-music")
+            let dl = Prefs.bool(Prefs.downloadsActivity)
+            UserDefaults.standard.set(true, forKey: Prefs.downloadsActivity)
+            model.downloads.debugSet([DownloadItem(id: "x", name: "Night Drive (Stems).zip", bytes: 412_000_000, total: 640_000_000)])
+            await pause(0.8)
+            island("21-compact-download")
+            model.downloads.debugSet([])
+            UserDefaults.standard.set(dl, forKey: Prefs.downloadsActivity)
+            await pause(0.5)
+            model.timer.start(minutes: 25)
+            await pause(1.0)
+            island("23-bubble-timer")
+            model.timer.stop()
+            model.handle(url: URL(string: "aries://activity?id=pizza&title=Pizza&subtitle=8%20min&icon=bicycle&color=orange&progress=0.65")!)
+            music.debugInject(Snapshot(track: track, isPlaying: false, position: 47, source: .spotify), artwork: art, lyrics: lyrics)
+            await pause(25)
+            island("24-activity")
+            model.live.endAll()
+            music.debugInject(snap, artwork: art, lyrics: lyrics)
+            await pause(1.0)
             model.expand(to: .music); await pause(1.0)
             island("02-music")
             model.showMusicPanel(.queue); await pause(0.8)
@@ -65,6 +85,8 @@ enum Snapshotter {
             model.select(.timer); await pause(1.0)
             island("08-timer")
             model.timer.stop()
+            model.select(.tools); await pause(1.0)
+            island("08b-tools")
             model.collapse(); await pause(0.5)
 
             model.calls.debugSet(CallInfo(kind: .incoming, title: "Alex Rivera", subtitle: "iPhone", symbol: "phone.fill",
@@ -92,6 +114,39 @@ enum Snapshotter {
             UserDefaults.standard.set("lyrics", forKey: "playerSide")
             render(FullScreenPlayer(music: music, clock: music.clock, scroll: scroll, close: {}), size: size,
                    to: "\(out)/15-lyrics.png", wait: 2.0)
+            UserDefaults.standard.set("vinyl", forKey: Prefs.lyricsStyle)
+            render(FullScreenPlayer(music: music, clock: music.clock, scroll: scroll, close: {}), size: size,
+                   to: "\(out)/15b-vinyl.png", wait: 2.2)
+            UserDefaults.standard.set("karaoke", forKey: Prefs.lyricsStyle)
+            render(FullScreenPlayer(music: music, clock: music.clock, scroll: scroll, close: {}), size: size,
+                   to: "\(out)/15c-karaoke.png", wait: 2.0)
+            UserDefaults.standard.set("lyrics", forKey: Prefs.lyricsStyle)
+            let demoTracks: [SpotifyWeb.SimpleTrack] = ["Paper Moons", "Neon Tide", "Static Hearts", "Glass Harbor", "Slow Satellites", "Afterglow Avenue"]
+                .enumerated().map { i, n in .init(id: "demo\(i)", uri: "spotify:track:demo\(i)", title: n, artist: "The Quiet Arcade",
+                                               artURL: nil, duration: Double(170 + i * 23)) }
+            music.debugSpotify(
+                artist: .init(id: "demo", uri: "spotify:artist:demo", name: "The Quiet Arcade", imageURL: nil, followers: 1_240_000,
+                              genres: ["dream pop", "indie", "synthwave"], top: demoTracks, following: false),
+                album: .init(id: "demoalb", uri: "spotify:album:demo", name: "Night Drive Letters", imageURL: nil, year: "2026",
+                             label: "Arcade Records", tracks: demoTracks),
+                playlists: [])
+            UserDefaults.standard.set("artist", forKey: "playerSide")
+            render(FullScreenPlayer(music: music, clock: music.clock, scroll: scroll, close: {}), size: size,
+                   to: "\(out)/15e-artist.png", wait: 1.2)
+            UserDefaults.standard.set("album", forKey: "playerSide")
+            render(FullScreenPlayer(music: music, clock: music.clock, scroll: scroll, close: {}), size: size,
+                   to: "\(out)/15f-album.png", wait: 1.2)
+            UserDefaults.standard.set("lyrics", forKey: "playerSide")
+            render(ZStack {
+                LinearGradient(colors: [Color(red: 0.2, green: 0.25, blue: 0.5), Color(red: 0.5, green: 0.3, blue: 0.45)],
+                               startPoint: .topLeading, endPoint: .bottomTrailing)
+                VStack(spacing: 14) {
+                    WidgetView(kind: .nowPlaying, model: model)
+                    HStack(spacing: 14) { WidgetView(kind: .clock, model: model); WidgetView(kind: .weather, model: model) }
+                    HStack(spacing: 14) { WidgetView(kind: .calendar, model: model); WidgetView(kind: .battery, model: model) }
+                    WidgetView(kind: .todos, model: model)
+                }
+            }, size: CGSize(width: 420, height: 780), to: "\(out)/15d-widgets.png", wait: 1.2)
             UserDefaults.standard.set("none", forKey: "playerSide")
             render(FullScreenPlayer(music: music, clock: music.clock, scroll: scroll, close: {}), size: size,
                    to: "\(out)/16-player.png", wait: 1.2)
@@ -103,8 +158,14 @@ enum Snapshotter {
                    to: "\(out)/18-welcome-features.png", wait: 1.5)
             render(WelcomeFlow(model: model, music: music, finish: {}, startAt: 4), size: CGSize(width: 920, height: 620),
                    to: "\(out)/19-welcome-done.png", wait: 1.8)
-            render(SettingsView(music: music, spotify: SpotifyWeb.shared), size: CGSize(width: 560, height: 2600),
-                   to: "\(out)/20-settings.png")
+            let pane = UserDefaults.standard.string(forKey: "settingsPane")
+            for p in ["music", "updates", "shortcuts"] {
+                UserDefaults.standard.set(p, forKey: "settingsPane")
+                render(SettingsView(music: music, spotify: SpotifyWeb.shared), size: CGSize(width: 800, height: 600),
+                       to: "\(out)/20-settings-\(p).png", wait: 1.0)
+            }
+            UserDefaults.standard.set(pane, forKey: "settingsPane")
+            render(WhatsNewView(done: {}, showClose: true), size: CGSize(width: 720, height: 820), to: "\(out)/22-whats-new.png", wait: 1.5)
             print("done")
             exit(0)
         }

@@ -1,10 +1,19 @@
 <div align="center">
 
+<img src="docs/media/aries-intro.gif" width="640" alt="Aries Dynamic Island intro">
+
+# Aries Dynamic Island 2.0 “Aquatic”
+
+**Your MacBook's notch, alive.** The iPhone's Dynamic Island, rebuilt for the Mac: music, karaoke lyrics, calls, Focus, widgets and tools, all living in your notch.
+
+[![Download Aries 2.0](https://img.shields.io/badge/Download-Aries%202.0%20Aquatic-0A84FF?style=for-the-badge&logo=apple&logoColor=white)](../../releases/latest)
+![macOS 14+](https://img.shields.io/badge/macOS-14%2B-black?style=for-the-badge&logo=apple)
+![Free](https://img.shields.io/badge/Price-Free-34C759?style=for-the-badge)
+
+<sub>A <b>Maxx Forge Studio</b> product</sub>
+
 <img src="docs/screenshots/island-music.png" width="720" alt="Aries Dynamic Island showing the music player in the MacBook notch">
 
-# Aries Dynamic Island
-
-**Your MacBook's notch, alive.**
 A Dynamic Island for macOS, built around Spotify, with synced Apple Music–style lyrics, calls, notes, a file shelf, timers and a tiny ram who lives in your notch.
 
 [Download](../../releases/latest) · [Features](#features) · [Install](#install) · [Spotify setup](#connect-spotify-phone-playback) · [Build from source](#build-from-source)
@@ -12,6 +21,33 @@ A Dynamic Island for macOS, built around Spotify, with synced Apple Music–styl
 </div>
 
 ---
+
+## ✨ What's new in 2.0 “Aquatic”, the biggest Aries update yet
+
+| | |
+|---|---|
+| 🎤 **Lyrics, reimagined** | Three full-screen styles: Apple Music–style **Lyrics**, a spinning **Vinyl** record that slides out of its sleeve, and **Karaoke**. |
+| 🎶 **Karaoke with a score** | Huge two-line karaoke, a 3-2-1 countdown before the vocals, and **Sing Along** scoring from your mic. |
+| 🟢 **Deeper Spotify** | Artist pages (follow, popular songs), full album tracklists, **Add to Playlist**, **Play Next** and Recently Played, right from the lyrics screen. |
+| 🎯 **Lyrics that stay in sync** | All-new timing engine keeps every word on the beat. Nudge any song with − / + and Aries remembers it. |
+| 🌊 **Aquatic & Crystal glass** | A see-through glass island, like Apple's Liquid Glass. |
+| 🖼️ **Living album art** | Artwork that gently moves while you listen, over a flowing background made from its colours. |
+| 🔒 **Lock Screen widgets** | Control what's playing and see weather, your next event and battery while your Mac is locked. |
+| 🧩 **Desktop widgets** | Now Playing, Clock, Weather, Up Next, Battery and To-Dos on your wallpaper. |
+| 🌙 **Focus modes** | The island lights up when Do Not Disturb, Work, Sleep or any Focus turns on, just like iPhone. |
+| 🧰 **New Tools tab** | Calculator & unit converter, Keep Awake, Color Picker, Screenshot, Dark Mode switch and a Coin Flip. |
+| 📞 **FaceTime & instant calls** | Rings the instant a call comes in and knows FaceTime Audio, FaceTime Video and iPhone calls. |
+| 📱 **More iPhone moments** | Caps Lock, Low Power Mode and offline alerts, and a second activity splits into its own bubble. |
+| ⚡ **Live Activities for everything** | Shortcuts, scripts and apps can put their own activity in the island with an `aries://` link. |
+| 🐏 **Meet the new Aries** | The ram got a full makeover, with headphones, moods and hearts. |
+| 🔄 **Automatic updates** | Aries keeps itself up to date and shows you what's new after every update. |
+
+<p align="center">
+<img src="docs/screenshots/widgets.png" width="260" alt="Desktop and Lock Screen widgets">
+<img src="docs/screenshots/tools.png" width="560" alt="The Tools tab">
+</p>
+
+<img src="docs/screenshots/lyric-strip.png" width="560" alt="Live lyrics under the notch">
 
 ## Features
 
@@ -34,10 +70,18 @@ A Dynamic Island for macOS, built around Spotify, with synced Apple Music–styl
 - A slowly flowing colour background made from the album art.
 - Instrumental breaks show the breathing **• • •** dots.
 - Click a line to jump to it. Scroll to look around and it glides back.
+- Three styles: **Lyrics** (Apple Music), **Vinyl** (a spinning record with a tonearm) and **Karaoke** (big centred lines with a countdown and Sing Along scoring).
+- **Living album art** and a flowing background made from the artwork's colours.
+- Lyrics a little early or late? Nudge them with **− / +** (or `[` `]`), saved per song.
+- Right-click a line to copy it, or copy all the lyrics from the ••• menu.
 - Switch between **Lyrics**, **Up Next**, and a **full-screen album-art player**.
-- Keys: space play/pause · ← → skip · ↑ ↓ volume · esc close.
+- Keys: 1 2 3 styles · space play/pause · ← → skip · ↑ ↓ volume · − + text size · esc close.
 
 <img src="docs/screenshots/lyrics.png" width="800" alt="Full-screen synced lyrics">
+
+<img src="docs/screenshots/vinyl.png" width="800" alt="Vinyl style: a spinning record with lyrics">
+
+<img src="docs/screenshots/karaoke.png" width="800" alt="Karaoke style with Sing Along scoring">
 
 ### 📞 Calls
 - Live call timer in the notch for FaceTime, iPhone calls (Continuity), Zoom, Teams, Discord, Slack huddles, Webex, WhatsApp and more.
@@ -54,6 +98,7 @@ A Dynamic Island for macOS, built around Spotify, with synced Apple Music–styl
 | **Notes** | Quick notes and to-dos. Pin, check off, copy. ⌥⌘N from anywhere. |
 | **Shelf** | Drag files onto the notch, then drag them out later or AirDrop them. |
 | **Timer** | Presets or custom. Countdown ring in the notch, a chime and confetti when done. Can double as a music sleep timer. |
+| **Tools** | Calculator and unit converter (`18% of 240`, `5 km to mi`), Keep Awake, Color Picker, Screenshot, Light/Dark switch, Sleep Screen and a Coin Flip. |
 | **Mirror** | Quick camera check before a call. The camera turns off the moment the island closes. |
 | **Clipboard** | Optional history of copied text (memory only, skips password managers). |
 | **Popups** | Volume, AirPods/headphones connecting, charging, low battery, mic/camera in use, meeting heads-up, unlock greeting. |
@@ -64,12 +109,21 @@ A Dynamic Island for macOS, built around Spotify, with synced Apple Music–styl
 </p>
 <img src="docs/screenshots/compact.png" width="560" alt="Compact notch states">
 
+### 🎬 Brand intro
+"Aries Dynamic Island" writes itself in cursive and flows into the chrome Aries logo, in the spirit of Apple's "hello". It plays when you first open Aries, and is also available as video: [16:9](docs/media/Aries-Intro-16x9.mp4) · [9:16 for Reels/TikTok](docs/media/Aries-Intro-9x16.mp4).
+
+### 🔐 Privacy & Permissions
+Aries asks for each permission only when a feature you turned on needs it, shows anything still missing in Settings and on the What's New page, and takes you straight to the right spot in System Settings.
+
 ### ✨ Welcome to Aries
 On first launch, *Welcome to Aries* is hand-written across the screen in cursive, inspired by Apple's "hello". A short tour then sets up music, calendar, weather and calls, and ends with a ✓ confirmation.
 
 <img src="docs/screenshots/welcome-features.png" width="640" alt="Welcome tour">
 
-### ⌨️ Keyboard shortcuts
+### ⚙️ Settings
+<img src="docs/screenshots/settings.png" width="640" alt="Settings">
+
+### ⌨️ Keyboard shortcuts & gestures
 | Shortcut | Action |
 |---|---|
 | ⌥⌘I | Open / close the island |
@@ -78,16 +132,27 @@ On first launch, *Welcome to Aries* is hand-written across the screen in cursive
 | ⌥⌘N | New note |
 | ⌥⌘M | Mute / unmute microphone |
 | ⌥⌘K | Like current song |
+| Two-finger swipe on the island | Next / previous song |
+| Two-finger scroll on the island | Volume |
 
 ---
 
 ## Install
 
-1. Download **Aries-Dynamic-Island.zip** from the [latest release](../../releases/latest) and unzip it.
+1. Download the **Aries-Dynamic-Island .zip** from the [latest release](../../releases/latest) and unzip it.
 2. Drag **Aries Dynamic Island.app** to **Applications**.
 3. The app isn't notarized by Apple yet, so the first time, **right-click it → Open → Open**.
    If macOS still blocks it, go to **System Settings → Privacy & Security** and click **Open Anyway**.
-4. Follow the welcome tour. When asked, allow Aries to control **Spotify** and **Music**.
+4. Follow the welcome tour, and when asked, allow Aries to control **Spotify** and **Music**.
+5. That's it. From now on Aries keeps itself up to date (Settings → Software Update).
+
+**Or with Homebrew:**
+
+```bash
+brew install --cask maxxforgestudio-del/tap/aries-dynamic-island
+```
+
+Website: **https://maxxforgestudio-del.github.io/aries-dynamic-island/**
 
 **Requires** macOS 14 Sonoma or later. Made for MacBooks with a notch, and works on other Macs and external displays as a floating island.
 If you use another notch app (NotchNook, boring.notch, Sapphire…), quit it so they don't overlap.
@@ -115,6 +180,7 @@ Aries has no accounts, analytics or servers of its own. Everything stays on your
 | [LRCLIB](https://lrclib.net) | Synced lyrics (song title + artist) |
 | iTunes Search API | Album art when a track has none |
 | [Open-Meteo](https://open-meteo.com) | Weather for the city you choose |
+| GitHub Releases | Checking for app updates (can be turned off) |
 
 | Permission | Used for |
 |---|---|
@@ -122,6 +188,7 @@ Aries has no accounts, analytics or servers of its own. Everything stays on your
 | Calendars | Next event and meeting heads-up (optional) |
 | Accessibility | Answer/decline iPhone calls and end calls from the notch (optional) |
 | Camera | Mirror tab only, and only while it's open |
+| Downloads folder | Download progress (optional, off by default) |
 
 Mic and camera *indicators* only check whether a device is in use. Aries never records audio or video.
 
@@ -130,6 +197,7 @@ Mic and camera *indicators* only check whether a device is in use. Aries never r
 Requires Xcode or the Xcode Command Line Tools (Swift 5.10+).
 
 ```bash
+# Maxx Forge Studio team only (the source is proprietary — see LICENSE)
 git clone https://github.com/maxxforgestudio-del/aries-dynamic-island.git
 cd aries-dynamic-island
 ./build.sh --install     # builds, copies to /Applications and launches
@@ -139,6 +207,7 @@ cd aries-dynamic-island
 - `./build.sh --zip` also makes a release zip
 - To publish a release: `./build.sh --zip`, then `gh release create vX.Y.Z build/*.zip`
 - `"build/Aries Dynamic Island.app/Contents/MacOS/Aries" --snapshot ./shots` renders every screen with demo content (that's how the screenshots above were made).
+- `"build/Aries Dynamic Island.app/Contents/MacOS/Aries" --render-intro ./media` renders the brand intro to MP4 (16:9 and 9:16) and GIF.
 
 ### Project layout
 ```
@@ -153,10 +222,13 @@ Sources/Aries/
   LocalPlayers.swift     AppleScript bridge to Spotify / Music
   SpotifyWeb.swift       Spotify Web API (PKCE sign-in, library, devices)
   NowPlayingBridge.swift phone playback → macOS lock screen & media keys
+  Updater.swift          GitHub release updates + What's New
+  Downloads.swift        download progress from ~/Downloads
   Lyrics.swift           LRCLIB lyrics + LRC parsing
   Calls.swift            call detection, answer/decline, mic mute
   Tools.swift            notes, clipboard, weather, mirror, hotkeys
   ToolTabs.swift         Notes, Clipboard, Mirror and Call tabs
+  QuickTools.swift       Tools tab: calculator, converter, keep awake, color picker…
   Features.swift         shelf, timer, calendar, audio devices
   SystemMonitor.swift    mic, camera, battery
   Buddy.swift            Aries the ram + confetti
@@ -172,4 +244,8 @@ Sources/Aries/
 
 ## License
 
-[MIT](LICENSE). Lyrics are provided by LRCLIB and remain the property of their owners. Spotify and Apple Music are trademarks of their respective owners; this project isn't affiliated with either.
+**© 2026 Maxx Forge Studio. All rights reserved.** Aries Dynamic Island is free to download and use, but the source code, design, names and logos are proprietary to Maxx Forge Studio and may not be copied, modified or redistributed. See [LICENSE](LICENSE).
+
+Lyrics are provided by LRCLIB and remain the property of their owners. Spotify and Apple Music are trademarks of their respective owners; Aries isn't affiliated with either.
+
+<div align="center"><img src="Resources/Branding/MaxxForgeStudio.png" width="120" alt="Maxx Forge Studio"><br><sub>A Maxx Forge Studio product</sub></div>

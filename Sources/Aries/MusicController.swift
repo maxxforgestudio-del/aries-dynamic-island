@@ -45,12 +45,34 @@ final class MusicController: ObservableObject {
     private var anchorDate = Date()
     private var localSpotify: Snapshot?
     private var localMusic: Snapshot?
+    private var webSnap: Snapshot?
+    private var webTick = 0
     private var remote: Snapshot?
     private var remoteInFlight = false
     private var timers: [Timer] = []
     private var ignoreUntil = Date.distantPast
 
     var duration: Double { track?.duration ?? 0 }
+
+    /// Per-song lyrics timing fix (seconds, + = lyrics earlier), remembered for each song.
+    @Published private(set) var songOffset: Double = 0
+
+    /// Playback time used for lyrics: the position plus your global and per-song timing fixes.
+    var lyricsTime: Double { position + songOffset + Prefs.double(Prefs.lyricsOffset) }
+
+    func nudgeLyrics(by delta: Double) {
+        guard let id = track?.id else { return }
+        songOffset = ((songOffset + delta) * 100).rounded() / 100
+        UserDefaults.standard.set(songOffset, forKey: "lyricsOffset." + id)
+        tickLyrics()
+    }
+
+    func resetLyricsOffset() {
+        guard let id = track?.id else { return }
+        songOffset = 0
+        UserDefaults.standard.removeObject(forKey: "lyricsOffset." + id)
+        tickLyrics()
+    }
 
     var position: Double {
         let p = isPlaying ? anchorPosition + Date().timeIntervalSince(anchorDate) : anchorPosition
@@ -103,10 +125,17 @@ final class MusicController: ObservableObject {
         LocalPlayers.queue.async { [weak self] in
             let s = LocalPlayers.spotify()
             let m = LocalPlayers.music()
+            // Browser tabs are only checked every 3 s, and only when nothing local is playing.
+            var w: Snapshot?? = .none
+            if let self, (s?.isPlaying != true && m?.isPlaying != true) {
+                self.webTick += 1
+                if self.webTick % 3 == 0 { w = .some(WebPlayers.snapshot()) }
+            }
             DispatchQueue.main.async {
                 guard let self else { return }
                 self.localSpotify = s
                 self.localMusic = m
+                if case .some(let v) = w { self.webSnap = v }
                 self.reconcile()
             }
         }
@@ -145,7 +174,7 @@ final class MusicController: ObservableObject {
             : (Prefs.string(Prefs.preferredSource) == "spotify"
                ? [localSpotify, remoteSnap, localMusic]
                : [localSpotify, remoteSnap, localMusic])
-        let candidates = order.compactMap { $0 }
+        let candidates = (order + [webSnap]).compactMap { $0 }
         let chosen = candidates.first(where: { $0.isPlaying })
             ?? candidates.first(where: { $0.source == source && $0.track.id == track?.id })
             ?? candidates.first
@@ -164,7 +193,8 @@ final class MusicController: ObservableObject {
         let changed = s.track.id != track?.id
         if changed {
             track = s.track
-            anchorPosition = s.position; anchorDate = Date()
+            anchorPosition = s.position; anchorDate = s.fetchedAt
+            songOffset = UserDefaults.standard.double(forKey: "lyricsOffset." + s.track.id)
             liked = nil
             loadArtwork(for: s)
             loadLyrics(for: s.track)
@@ -176,9 +206,15 @@ final class MusicController: ObservableObject {
         if deviceName != s.deviceName { deviceName = s.deviceName }
         if deviceType != s.deviceType { deviceType = s.deviceType }
 
-        let drift = abs(position - s.position)
-        if isPlaying != s.isPlaying || drift > 1.2 {
-            anchorPosition = s.position; anchorDate = Date()
+        // Where the player really is right now (it was read a moment ago, at fetchedAt).
+        let now = Date()
+        let expected = s.isPlaying ? s.position + now.timeIntervalSince(s.fetchedAt) : s.position
+        let drift = expected - position
+        if isPlaying != s.isPlaying || abs(drift) > 0.4 || !changed && abs(drift) > 0.4 {
+            anchorPosition = expected; anchorDate = now
+        } else if abs(drift) > 0.04, s.isPlaying {
+            // Small drift: glide toward the true position instead of jumping (keeps word timing smooth).
+            anchorPosition = position + drift * 0.35; anchorDate = now
         }
         if isPlaying != s.isPlaying { isPlaying = s.isPlaying }
         if let v = s.shuffle, v != shuffle { shuffle = v }
@@ -239,7 +275,7 @@ final class MusicController: ObservableObject {
             if clock.lineIndex != nil { clock.lineIndex = nil }
             return
         }
-        let idx = l.index(at: position + 0.25)
+        let idx = l.index(at: lyricsTime + 0.2)
         if clock.lineIndex != idx { clock.lineIndex = idx }
     }
 
@@ -255,7 +291,9 @@ final class MusicController: ObservableObject {
     }
 
     func playPause() {
+        if source == .web { WebPlayers.mediaKey(WebPlayers.keyPlay); isPlaying.toggle(); return }
         switch source {
+        case .web: break
         case .spotify, .appleMusic: LocalPlayers.send(source, "playpause")
         case .spotifyRemote: Task { await SpotifyWeb.shared.setPlaying(!isPlaying) }
         }
@@ -265,7 +303,9 @@ final class MusicController: ObservableObject {
     }
 
     func next() {
+        if source == .web { WebPlayers.mediaKey(WebPlayers.keyNext); settle(after: 2); return }
         switch source {
+        case .web: break
         case .spotify, .appleMusic: LocalPlayers.send(source, "next track")
         case .spotifyRemote: Task { await SpotifyWeb.shared.skip(forward: true) }
         }
@@ -273,7 +313,9 @@ final class MusicController: ObservableObject {
     }
 
     func previous() {
+        if source == .web { WebPlayers.mediaKey(WebPlayers.keyPrevious); settle(after: 2); return }
         switch source {
+        case .web: break
         case .spotify, .appleMusic: LocalPlayers.send(source, "previous track")
         case .spotifyRemote: Task { await SpotifyWeb.shared.skip(forward: false) }
         }
@@ -281,8 +323,10 @@ final class MusicController: ObservableObject {
     }
 
     func seek(to t: Double) {
+        guard source != .web, duration > 0 else { return }
         let target = min(max(0, t), duration)
         switch source {
+        case .web: break
         case .spotify, .appleMusic:
             LocalPlayers.send(source, "set player position to \(String(format: "%.2f", target))")
         case .spotifyRemote:
@@ -296,6 +340,11 @@ final class MusicController: ObservableObject {
 
     func openPlayerApp() {
         switch source {
+        case .web:
+            let browser = WebPlayers.browsers.first { (deviceName ?? "").hasSuffix($0.name) }
+            if let id = browser?.id, let app = NSRunningApplication.runningApplications(withBundleIdentifier: id).first {
+                app.activate()
+            }
         case .spotify, .spotifyRemote:
             NSWorkspace.shared.open(URL(string: "spotify:")!)
         case .appleMusic:
@@ -351,6 +400,7 @@ final class MusicController: ObservableObject {
     func toggleShuffle() {
         shuffle.toggle()
         switch source {
+        case .web: break
         case .spotify, .appleMusic: LocalPlayers.setShuffle(source, shuffle)
         case .spotifyRemote: let v = shuffle; Task { await SpotifyWeb.shared.setShuffle(v) }
         }
@@ -367,6 +417,7 @@ final class MusicController: ObservableObject {
         }
         let m = repeatMode
         switch source {
+        case .web: break
         case .spotify, .appleMusic: LocalPlayers.setRepeat(source, m)
         case .spotifyRemote: Task { await SpotifyWeb.shared.setRepeat(m) }
         }
@@ -381,6 +432,7 @@ final class MusicController: ObservableObject {
         let src = source
         let w = DispatchWorkItem {
             switch src {
+            case .web: break
             case .spotify, .appleMusic: LocalPlayers.setVolume(src, v)
             case .spotifyRemote: Task { await SpotifyWeb.shared.setVolume(v) }
             }
@@ -456,10 +508,117 @@ final class MusicController: ObservableObject {
         }
     }
 
+    // MARK: Spotify: artist, album, playlists
+
+    @Published private(set) var artistInfo: SpotifyWeb.ArtistInfo?
+    @Published private(set) var albumInfo: SpotifyWeb.AlbumInfo?
+    @Published private(set) var playlists: [SpotifyWeb.Playlist] = []
+    @Published private(set) var loadingSpotify = false
+    private var resolved: (key: String, ids: (artist: String, album: String, track: String))?
+
+    private func resolveCurrent() async -> (artist: String, album: String, track: String)? {
+        guard let t = track else { return nil }
+        if let r = resolved, r.key == t.id { return r.ids }
+        let ids = await SpotifyWeb.shared.resolve(trackID: t.spotifyID, title: t.title, artist: t.artist)
+        if let ids { await MainActor.run { self.resolved = (t.id, ids) } }
+        return ids
+    }
+
+    func loadArtist() {
+        guard webConnected, !demoMode else { return }
+        loadingSpotify = true
+        Task {
+            let ids = await resolveCurrent()
+            let info: SpotifyWeb.ArtistInfo? = ids == nil ? nil : await SpotifyWeb.shared.artist(ids!.artist)
+            await MainActor.run { self.artistInfo = info; self.loadingSpotify = false }
+        }
+    }
+
+    func loadAlbum() {
+        guard webConnected, !demoMode else { return }
+        loadingSpotify = true
+        Task {
+            let ids = await resolveCurrent()
+            let info: SpotifyWeb.AlbumInfo? = ids == nil ? nil : await SpotifyWeb.shared.album(ids!.album)
+            await MainActor.run { self.albumInfo = info; self.loadingSpotify = false }
+        }
+    }
+
+    func loadPlaylists() {
+        guard webConnected, !demoMode, playlists.isEmpty else { return }
+        Task {
+            let p = await SpotifyWeb.shared.playlists()
+            await MainActor.run { self.playlists = p }
+        }
+    }
+
+    func addCurrent(to p: SpotifyWeb.Playlist) {
+        Task {
+            guard let ids = await resolveCurrent() else {
+                await MainActor.run { self.onConfirm?("exclamationmark.triangle.fill", "Song not found on Spotify") }
+                return
+            }
+            let ok = await SpotifyWeb.shared.add(uri: "spotify:track:\(ids.track)", toPlaylist: p.id)
+            await MainActor.run {
+                self.onConfirm?(ok ? "text.badge.plus" : "exclamationmark.triangle.fill",
+                                ok ? "Added to \(p.name)" : "Couldn't add. Reconnect Spotify in Settings")
+            }
+        }
+    }
+
+    func addToQueue(_ t: SpotifyWeb.SimpleTrack) {
+        Task {
+            let ok = await SpotifyWeb.shared.addToQueue(uri: t.uri)
+            await MainActor.run {
+                self.onConfirm?(ok ? "text.line.last.and.arrowtriangle.forward" : "exclamationmark.triangle.fill",
+                                ok ? "Playing next: \(t.title)" : "Start playing on Spotify first")
+                if ok { self.loadQueue() }
+            }
+        }
+    }
+
+    func toggleFollow() {
+        guard let a = artistInfo else { return }
+        let on = !(a.following ?? false)
+        artistInfo?.following = on
+        Task {
+            let ok = await SpotifyWeb.shared.setFollowing(artist: a.id, on)
+            await MainActor.run {
+                if !ok { self.artistInfo?.following = !on }
+                self.onConfirm?(ok ? (on ? "person.crop.circle.badge.checkmark" : "person.crop.circle.badge.minus") : "exclamationmark.triangle.fill",
+                                ok ? (on ? "Following \(a.name)" : "Unfollowed \(a.name)") : "Reconnect Spotify to follow artists")
+            }
+        }
+    }
+
+    /// Plays a song inside its album or artist, so Spotify keeps going from there.
+    func play(_ t: SpotifyWeb.SimpleTrack, inContext context: String) {
+        if source == .spotify || (LocalPlayers.isRunning(LocalPlayers.spotifyID) && source != .spotifyRemote) {
+            context.hasPrefix("spotify:album") ? LocalPlayers.playSpotifyURI(t.uri, context: context) : LocalPlayers.playSpotifyURI(t.uri)
+            onConfirm?("play.fill", "Playing \(t.title)")
+            settle(after: 1.0)
+            return
+        }
+        Task {
+            let ok = context.hasPrefix("spotify:album")
+                ? await SpotifyWeb.shared.play(context: context, offset: t.uri)
+                : await SpotifyWeb.shared.play(uri: t.uri)
+            await MainActor.run {
+                self.onConfirm?(ok ? "play.fill" : "exclamationmark.triangle.fill", ok ? "Playing \(t.title)" : "Open Spotify on a device first")
+                self.settle(after: 1.5)
+            }
+        }
+    }
+
+    func debugSpotify(artist: SpotifyWeb.ArtistInfo?, album: SpotifyWeb.AlbumInfo?, playlists: [SpotifyWeb.Playlist]) {
+        artistInfo = artist; albumInfo = album; self.playlists = playlists
+    }
+
     // MARK: Presentation helpers
 
     var sourceLabel: String {
         switch source {
+        case .web: return deviceName ?? "Web player"
         case .spotify: return "Spotify"
         case .appleMusic: return "Music"
         case .spotifyRemote: return "Spotify · \(deviceName ?? "Phone")"
@@ -468,6 +627,7 @@ final class MusicController: ObservableObject {
 
     var sourceSymbol: String {
         switch source {
+        case .web: return "globe"
         case .spotify: return "circle.fill"
         case .appleMusic: return "music.note"
         case .spotifyRemote: return deviceSymbol

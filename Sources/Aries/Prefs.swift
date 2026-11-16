@@ -40,6 +40,16 @@ enum Prefs {
     static let showNotesTab = "showNotesTab"
     static let showClipboard = "showClipboard"
     static let showMirror = "showMirror"
+    static let showTools = "showTools"
+    static let lyricsOffset = "lyricsOffset"            // seconds, + = earlier
+    static let lyricsStyle = "lyricsStyle"              // lyrics | vinyl | karaoke
+    static let animatedArt = "animatedArt"
+    static let desktopWidgets = "desktopWidgets"
+    static let lockScreenWidgets = "lockScreenWidgets"
+    static let focusToasts = "focusToasts"
+    static let capsLockToast = "capsLockToast"
+    static let lowPowerToast = "lowPowerToast"
+    static let networkToast = "networkToast"
     static let showWeather = "showWeather"
     static let weatherCity = "weatherCity"
     static let weatherLat = "weatherLat"
@@ -53,6 +63,22 @@ enum Prefs {
     static let timerPausesMusic = "timerPausesMusic"
     static let hideInFullscreen = "hideInFullscreen"
     static let onboardingVersion = "onboardingVersion"
+
+    static let autoUpdateCheck = "autoUpdateCheck"
+    static let lastSeenVersion = "lastSeenVersion"
+    static let liveLyrics = "liveLyrics"
+    static let gestures = "gestures"
+    static let downloadsActivity = "downloadsActivity"
+    static let downloadsToShelf = "downloadsToShelf"
+
+    static let islandStyle = "islandStyle"              // aquatic | classic
+    static let autoInstallUpdates = "autoInstallUpdates"
+    static let reduceMotion = "a11yReduceMotion"
+    static let reduceTransparency = "a11yReduceTransparency"
+    static let largerIsland = "a11yLargerIsland"
+    static let highContrast = "a11yHighContrast"
+    static let announce = "a11yAnnounce"
+    static let webPlayers = "webPlayers"
     static let didOnboard = "didOnboard"
 
     static func register() {
@@ -89,6 +115,16 @@ enum Prefs {
             showNotesTab: true,
             showClipboard: false,
             showMirror: true,
+            showTools: true,
+            lyricsOffset: 0.0,
+            lyricsStyle: "lyrics",
+            animatedArt: true,
+            desktopWidgets: false,
+            lockScreenWidgets: true,
+            focusToasts: true,
+            capsLockToast: true,
+            lowPowerToast: true,
+            networkToast: true,
             showWeather: true,
             fahrenheit: Locale.current.measurementSystem == .us,
             announceSongs: true,
@@ -98,6 +134,19 @@ enum Prefs {
             hotkeys: true,
             timerPausesMusic: false,
             hideInFullscreen: false,
+            autoUpdateCheck: true,
+            liveLyrics: true,
+            gestures: true,
+            downloadsActivity: false,
+            downloadsToShelf: true,
+            islandStyle: "aquatic",
+            autoInstallUpdates: true,
+            reduceMotion: false,
+            reduceTransparency: false,
+            largerIsland: false,
+            highContrast: false,
+            announce: true,
+            webPlayers: false,
         ])
     }
 
