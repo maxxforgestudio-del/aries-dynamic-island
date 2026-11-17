@@ -243,6 +243,18 @@ enum Brand {
     static let company = "Maxx Forge Studio"
     static let copyright = "© 2026 Maxx Forge Studio. All rights reserved."
     static let website = URL(string: "https://www.maxxforgestudio.com")!
+    static let downloadPage = URL(string: "https://maxxforgestudio-del.github.io/aries-dynamic-island/")!
+    static let shareText = "Turn your MacBook notch into a Dynamic Island 🏝️ Aries is free:"
+
+    /// The macOS share menu (Messages, Mail, AirDrop, Notes…) with the Aries download link.
+    static func share(from view: NSView?, rect: NSRect? = nil) {
+        let picker = NSSharingServicePicker(items: [shareText, downloadPage])
+        if let view {
+            picker.show(relativeTo: rect ?? view.bounds, of: view, preferredEdge: .minY)
+        } else if let w = NSApp.keyWindow ?? NSApp.windows.first(where: { $0.isVisible }), let v = w.contentView {
+            picker.show(relativeTo: NSRect(x: v.bounds.midX, y: v.bounds.midY, width: 1, height: 1), of: v, preferredEdge: .minY)
+        }
+    }
     /// Where help questions and bug reports go. The patch notes feed can point this somewhere
     /// else (`supportURL`) without an app update.
     static let defaultSupport = URL(string: "https://www.maxxforgestudio.com/help")!

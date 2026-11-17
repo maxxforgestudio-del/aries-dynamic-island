@@ -841,6 +841,7 @@ private struct AboutPane: View {
                         Text("Aries Dynamic Island is a Maxx Forge Studio product.").font(.callout).foregroundStyle(.secondary)
                     }
                 }
+                ShareAriesButton()
                 Link("Visit maxxforgestudio.com", destination: Brand.website)
                 Link("Get help or ask a question", destination: PatchNotes.supportURL())
                 Link("Report a bug", destination: PatchNotes.reportBugURL)
@@ -1126,5 +1127,26 @@ private struct SidebarRow: View {
         }
         .buttonStyle(.plain)
         .onHover { h in withAnimation(.easeOut(duration: 0.15)) { hover = h } }
+    }
+}
+
+/// "Share Aries with Friends" — opens the macOS share menu right under the button.
+private struct ShareAriesButton: View {
+    var body: some View {
+        ShareAnchor().fixedSize()
+    }
+    private struct ShareAnchor: NSViewRepresentable {
+        func makeNSView(context: Context) -> NSButton {
+            let b = NSButton(title: "Share Aries with Friends…", target: context.coordinator, action: #selector(Coordinator.tap(_:)))
+            b.image = NSImage(systemSymbolName: "square.and.arrow.up", accessibilityDescription: nil)
+            b.imagePosition = .imageLeading
+            b.bezelStyle = .rounded
+            return b
+        }
+        func updateNSView(_ nsView: NSButton, context: Context) {}
+        func makeCoordinator() -> Coordinator { Coordinator() }
+        final class Coordinator: NSObject {
+            @objc func tap(_ sender: NSButton) { Brand.share(from: sender) }
+        }
     }
 }
